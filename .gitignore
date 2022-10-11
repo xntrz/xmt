@@ -1,0 +1,6 @@
+*.csproj
+*.db
+*.user
+**/.vscode/*
+*.code-workspace
+*.exe

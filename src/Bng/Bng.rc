@@ -1,0 +1,71 @@
+#include "BngRc.hpp"
+#include <winres.h>
+#include <CommCtrl.h>
+#include <prsht.h>
+
+
+IDI_MODULE		ICON	"Bng.ico"
+IDF_INI			RAWFILE "Bng.ini"
+
+
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+IDD_BNG DIALOG 0, 0, 207, 241
+STYLE DS_3DLOOK | DS_SHELLFONT | WS_VISIBLE | WS_CHILDWINDOW | WS_SYSMENU
+FONT 8, "Ms Shell Dlg"
+{
+	GROUPBOX        "Parameter:", IDD_BNG_GRP_PARAM, 16, 10, 175, 120, 0, WS_EX_LEFT		
+	LTEXT           "Channel:", IDD_BNG_GRP_PARAM_STRCHANNEL, 30, 25, 59, 9, SS_LEFT, WS_EX_LEFT
+	EDITTEXT        IDD_BNG_GRP_PARAM_CHANNEL, 100, 25, 75, 13, ES_AUTOHSCROLL, WS_EX_LEFT
+	LTEXT           "Viewers:", IDD_BNG_GRP_PARAM_STRVIEWER, 30, 45, 59, 9, SS_LEFT, WS_EX_LEFT
+	EDITTEXT        IDD_BNG_GRP_PARAM_VIEWER, 100, 45, 75, 13, ES_AUTOHSCROLL | ES_NUMBER, WS_EX_LEFT
+	LTEXT           "Proxy Mode:", IDD_BNG_GRP_PARAM_STRPRXMODE, 30, 65, 59, 9, SS_LEFT, WS_EX_LEFT
+	PUSHBUTTON      "", IDD_BNG_GRP_PARAM_PRXMODE, 100, 65, 75, 9, BS_AUTOCHECKBOX | SS_LEFT, WS_EX_LEFT
+	LTEXT           "Proxy type:", IDD_BNG_GRP_PARAM_STRPRX, 30, 85, 36, 9, SS_LEFT, WS_EX_LEFT
+	COMBOBOX        IDD_BNG_GRP_PARAM_PRX, 100, 85, 75, 15, CBS_DROPDOWNLIST | CBS_HASSTRINGS, WS_EX_LEFT
+	LTEXT           "Proxy list:", IDD_BNG_GRP_PARAM_STRPRXLIST, 30, 105, 35, 9, SS_LEFT, WS_EX_LEFT
+	PUSHBUTTON      "Open", IDD_BNG_GRP_PARAM_PRXLIST, 100, 105, 75, 15, 0, WS_EX_LEFT
+
+	GROUPBOX        "Result", IDD_BNG_GRP_RESULT, 15, RESULT_GRP_OFSY + 75, 175, 60, 0, WS_EX_LEFT
+	LTEXT           "Static", IDD_BNG_GRP_RESULT_STRING, 35, RESULT_GRP_OFSY + 90, 65, 35, SS_LEFT, WS_EX_LEFT
+	LTEXT           "Static", IDD_BNG_GRP_RESULT_VALUE, 105, RESULT_GRP_OFSY + 90, 65, 35, SS_LEFT, WS_EX_LEFT
+    
+	PUSHBUTTON      "Start", IDD_BNG_START, 15, 215, 70, 15, 0, WS_EX_LEFT
+	PUSHBUTTON      "Stop", IDD_BNG_STOP, 120, 215, 70, 15, 0, WS_EX_LEFT
+}
+
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+STRINGTABLE
+BEGIN
+IDS_TITLE                           "Bongacams"
+IDS_START                           "Start"
+IDS_STOP                            "Stop"
+IDS_STATUS_NONE                     "Not running"
+IDS_STATUS_RUN                      "Running"
+IDS_RESULT_FIELD                    "Status:\n\
+							        Botted:\n\
+							        Viewers:\n\
+                                    Walktime:\n"
+IDS_RESULT_FORMAT                   "%s\n%d\n%d\n%u MS\n"
+IDS_TARGET_CH                       "Channel name:"
+IDS_ERR_CHLIVE                      "Channel is not live! Select a channel that is currently streaming."
+IDS_ERR_CHEXIST                     "Channel is not exist! Check for proper channel name."
+IDS_PARAMS                          "Parameters:"
+IDS_RESULT                          "Result:"
+IDS_ERROR                           "Error"
+IDS_ERR_TARGETID_LARGE              "Specified bot target is to large! Target should be within 256 characters long."
+IDS_ERR_HOST_UNREACH                "Cannot reach source host"
+IDS_PRXTYPE                         "Proxy type:"
+IDS_PRXLIST                         "Proxy list:"
+IDS_OPEN                            "Open"
+IDS_ERR_IMPORT                      "Proxy list import failed! Check for proper list."
+IDS_ERR_DETECT                      "Bot has been detected. Stopping."
+IDS_PROXYMODE                       "Proxy mode:"
+END
+
+
+//LANGUAGE LANG_RUSSIAN, SUBLANG_RUSSIAN_RUSSIA
+//STRINGTABLE
+//BEGIN
+//
+//END

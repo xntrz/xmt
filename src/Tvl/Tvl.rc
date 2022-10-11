@@ -1,0 +1,70 @@
+#include "TvlRc.hpp"
+#include <winres.h>
+#include <CommCtrl.h>
+#include <prsht.h>
+
+
+IDI_MODULE		ICON	"Tvl.ico"
+IDF_INI			RAWFILE "Tvl.ini"
+
+
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+IDD_TVL DIALOG 0, 0, 207, 241
+STYLE DS_3DLOOK | DS_SHELLFONT | WS_VISIBLE | WS_CHILDWINDOW | WS_SYSMENU
+FONT 8, "Ms Shell Dlg"
+{
+	GROUPBOX        "Parameter:", IDD_TVL_GRP_PARAM, 16, 10, 175, 100, 0, WS_EX_LEFT		
+	LTEXT           "Bot type:", IDD_TVL_GRP_PARAM_STRBOTTYPE, 30, 25, 36, 9, SS_LEFT, WS_EX_LEFT
+    COMBOBOX        IDD_TVL_GRP_PARAM_BOTTYPE, 100, 25, 75, 15, CBS_DROPDOWNLIST | CBS_HASSTRINGS, WS_EX_LEFT
+	LTEXT           "Channel:", IDD_TVL_GRP_PARAM_STRCHANNEL, 30, 45, 59, 9, SS_LEFT, WS_EX_LEFT
+	EDITTEXT        IDD_TVL_GRP_PARAM_CHANNEL, 100, 45, 75, 13, ES_AUTOHSCROLL, WS_EX_LEFT
+	LTEXT           "Viewers:", IDD_TVL_GRP_PARAM_STRVIEWER, 30, 65, 59, 9, SS_LEFT, WS_EX_LEFT
+	EDITTEXT        IDD_TVL_GRP_PARAM_VIEWER, 100, 65, 75, 13, ES_AUTOHSCROLL | ES_NUMBER, WS_EX_LEFT
+	LTEXT           "Keepalive mode:", IDD_TVL_GRP_PARAM_STRMODE, 30, 85, 59, 9, SS_LEFT, WS_EX_LEFT
+	CHECKBOX 		"", IDD_TVL_GRP_PARAM_MODE, 100, 85, 59, 9, BS_AUTOCHECKBOX | SS_LEFT, WS_EX_LEFT
+
+
+	GROUPBOX        "Result", IDD_TVL_GRP_RESULT, 15, RESULT_OFSY + 75, 175, 60, 0, WS_EX_LEFT
+	LTEXT           "Static", IDD_TVL_GRP_RESULT_STRING, 35, RESULT_OFSY + 90, 65, 35, SS_LEFT, WS_EX_LEFT
+	LTEXT           "Static", IDD_TVL_GRP_RESULT_VALUE, 105, RESULT_OFSY + 90, 65, 35, SS_LEFT, WS_EX_LEFT
+    
+	PUSHBUTTON      "Start", IDD_TVL_START, 15, 215, 70, 15, 0, WS_EX_LEFT
+	PUSHBUTTON      "Stop", IDD_TVL_STOP, 120, 215, 70, 15, 0, WS_EX_LEFT
+}
+
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+STRINGTABLE
+BEGIN
+IDS_TITLE                           "Trovo.live"
+IDS_START                           "Start"
+IDS_STOP                            "Stop"
+IDS_STATUS_NONE                     "Not running"
+IDS_STATUS_RUN                      "Running"
+IDS_RESULT_FIELD                    "Status:\n\
+							        Botted:\n\
+							        Viewers:\n\
+                                    Walktime:\n"
+IDS_RESULT_FORMAT                   "%s\n%d\n%d\n%u MS\n"
+IDS_TARGET_CH                       "Channel name:"
+IDS_ERR_CHLIVE                      "Channel is not live! Select a channel that is currently streaming."
+IDS_ERR_CHEXIST                     "Channel is not exist! Check for proper channel name."
+IDS_PARAMS                          "Parameters:"
+IDS_RESULT                          "Result:"
+IDS_ERROR                           "Error"
+IDS_ERR_TARGETID_LARGE              "Specified bot target is to large! Target should be within 256 characters long."
+IDS_ERR_TARGETID_PROTECT            "Cannot bot at specified target stream! Channel is protected by auth challenge."
+IDS_KEEPALIVEMODE                   "Keepalive mode:"
+IDS_BOTTYPE                         "Bot type:"
+IDS_TARGET_CL                       "Clip id:"
+IDS_TARGET_VO                       "Vod id:"
+IDS_ERR_CLEXIST                     "Clip is not exist! Check for proper clip id."
+IDS_ERR_VOEXIST                     "Vod is not exist! Check for proper vod id."
+END
+
+
+//LANGUAGE LANG_RUSSIAN, SUBLANG_RUSSIAN_RUSSIA
+//STRINGTABLE
+//BEGIN
+//
+//END
