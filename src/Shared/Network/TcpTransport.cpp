@@ -11,8 +11,6 @@
 #include "NetSockUtils.hpp"
 #include "NetSettings.hpp"
 
-#include "Shared/Common/AsyncService.hpp"
-
 
 enum TcpTransportFlag_t
 {
@@ -131,7 +129,8 @@ static bool TcpTransportIoCompletionProc(void* Act, uint32 Bytes, uint32 ErrorCo
     //
     //  Dispatch phase
     //
-    switch (TcpAct->Type)
+    TcpActType_t ActType = TcpAct->Type;
+    switch (ActType)
     {
     case TcpActType_Accept:
         TcpTransportCompleteAccept(TcpTransport, (TcpActAccept_t*)Act, Bytes, ErrorCode);
@@ -163,8 +162,8 @@ static bool TcpTransportIoCompletionProc(void* Act, uint32 Bytes, uint32 ErrorCo
     //
     if (!ErrorCode)
     {
-        if ((TcpAct->Type == TcpActType_Connect) ||
-            (TcpAct->Type == TcpActType_Read))
+        if ((ActType == TcpActType_Connect) ||
+            (ActType == TcpActType_Read))
         {       
             if (TcpTransportTestFlag(TcpTransport, TcpTransportFlag_DcRequest))
             {
