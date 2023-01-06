@@ -322,6 +322,17 @@ static bool TvlDlgOnInitialize(TvlDlg_t* TvlDlg, HWND hDlg)
     TvlDlgComboboxInit(TvlDlg, IDD_TVL_GRP_PARAM_BOTTYPE);
     TvlDlgComboboxChanged(TvlDlg, IDD_TVL_GRP_PARAM_BOTTYPE);
 
+    //
+    //  TODO: 
+    //  Now chat sessions is not staying alive for some time after forcefully 
+    //  closing it with socket don't linger option
+    // 
+    //  Disable visibility of this option for now
+    //
+    ShowWindow(GetDlgItem(TvlDlg->hDlg, IDD_TVL_GRP_PARAM_STRMODE), FALSE);
+    ShowWindow(GetDlgItem(TvlDlg->hDlg, IDD_TVL_GRP_PARAM_MODE), FALSE);
+    TvlSettings.RunMode = TvlRunMode_Keepalive;
+
     return true;
 };
 

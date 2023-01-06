@@ -479,8 +479,8 @@ void CBngStateChat::Attach(void* Param)
         }
     );
     Ws().set_request(
-        "GET /websocket HTTP/1.1\r\n"
-        "Host: " + Ds().Get(BNGCTX::DB::WSS) + "\r\n"
+        "GET " + Ds().Get(BNGCTX::DB::WSS) + "/websocket HTTP/1.1\r\n"
+        "Host: " + WebUrlExtractDomain(Ds().Get(BNGCTX::DB::WSS)) + "\r\n"
         "User-Agent: " + Ds().Get(BNGCTX::DB::USERAGENT) + "\r\n"
         "Accept: */*\r\n"
         "Origin: https://" + HostForMe() + "\r\n"	// RFC 6455, page 18, 8
@@ -607,6 +607,7 @@ void CBngObjCtx::Start(void)
                 m_nStateSequenceCur = m_nStateSequenceHead;            
             m_Shared.m_RetryNo = 0;
             m_Shared.m_DataStore.Clear();
+            m_Shared.m_DataStore.Set(BNGCTX::DB::USERAGENT, UserAgentGenereate());
         };
     };
 
