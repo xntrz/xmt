@@ -293,7 +293,8 @@ int CWebsocketStream::write(const void* data, int dataSize, std::vector<unsigned
 	{
 		header.rsv1 = true;
 		assert(m_pCompressor);
-		compressed = m_pCompressor->Deflate(data, dataSize);
+		if (dataSize)
+			compressed = m_pCompressor->Deflate(data, dataSize);
 		assert(!compressed.empty());
 	}
 	else
@@ -326,18 +327,27 @@ int CWebsocketStream::write(const void* data, int dataSize, std::vector<unsigned
 		output.insert(output.end(), (unsigned char*)&header, (unsigned char*)&header + sizeof(header));
 		output.insert(output.end(), (unsigned char*)&size, (unsigned char*)&size + sizeof(unsigned long long));
 	};
-	
+
 	//
-	//	Mask payload if required
+	//	Append mask to msg
 	//
+	unsigned Mask = 0;
 	if ((m_features & FEATURE_MASKING) == FEATURE_MASKING)
 	{
-		unsigned Mask = RndUInt32(0x10000000, 0xFFFFFFFF);
+		Mask = RndUInt32(0x10000000, 0xFFFFFFFF);
 		output.insert(output.end(), (unsigned char*)&Mask, (unsigned char*)&Mask + sizeof(unsigned));
-		WsMaskUnmask(&compressed[0], &compressed[0], compressed.size(), (char*)&Mask);
-	};	
+	};
 
-	output.insert(output.end(), compressed.begin(), compressed.end());
+	//
+	//	Mask payload if there is some data and if its required
+	//
+	if (compressed.size())
+	{
+		if (((m_features & FEATURE_MASKING) == FEATURE_MASKING) && compressed.size())
+			WsMaskUnmask(&compressed[0], &compressed[0], compressed.size(), (char*)&Mask);
+
+		output.insert(output.end(), compressed.begin(), compressed.end());
+	};
 
 	return RESULT_OK;
 };

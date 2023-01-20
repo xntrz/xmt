@@ -446,9 +446,17 @@ void CWebsocket::context::on_shutdown(void)
                             }
                             else if (Msg.m_opcode == CWebsocketStream::OPCODE_PING)
                             {
-                                //
-                                //  TODO ws ping opcode
-                                //
+								char tmpdata[4];
+
+								//
+								//	If datalen is null data pointer is null too so replace it with
+								//	tmpdata buffer and same zero len for correct send call
+								//
+								if (datalen == 0)
+									data = tmpdata;
+
+                                if (!Ctx.m_pWs->send_common(data, datalen, CWebsocketStream::OPCODE_PONG))
+                                    Ctx.m_pWs->abort();                                
                             }
                             else if (Msg.m_opcode == CWebsocketStream::OPCODE_PONG)
                             {
