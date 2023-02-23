@@ -56,6 +56,7 @@ public:
 
     //
     //  Send current request to a specified URL
+	//	If functions fails on_error callback will be invoked
     //
     bool send(const std::string& Url, uint32 ConnectTimeout = 0);
 

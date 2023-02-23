@@ -68,13 +68,11 @@ void CPrxStateMain::Attach(void* Param)
 
     m_FnSendRequest = [&]()
     {
-        if (m_req.send(
+        CPrxResult::Instance().NoteStart();
+
+        if (!m_req.send(
             std::string(PrxSettings.TargetHost) + ":" + std::to_string(PrxSettings.TargetPort),
             PrxSettings.Timeout))
-        {
-            CPrxResult::Instance().NoteStart();
-        }
-        else
         {
             m_Result = CPrxResult::RESULTTYPE_FAIL;
             Subject().ServiceRequest(PRX::SVCFLAG_STRIDE | PRX::SVCFLAG_RESULT);
