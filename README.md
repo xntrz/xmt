@@ -17,7 +17,7 @@
 `Shared` - shared code between app and modules\
 `Base` - main executable app\
 `Utils` - utils that used only by modules\
-`Tvl` - Trovo viewbot module\
+`Tvl` - Trovo viewbot module
 
 # 3rd party solutions used
 * Base64 - [cppbase64](https://github.com/ReneNyffenegger/cpp-base64)
