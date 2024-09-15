@@ -1,27 +1,23 @@
 # XMT
 #### Program for Trovo.live simple viewbotting. Made for learning purposes only.
 <img src="scr1.png" width="250"/>
-<br></br>
 
 # Notes
 * All botted viewers are guests from your IP (no proxies required)
 * Its dont work if stream is protected by authentication challenge or subscribers only mode
 * If keepalive mode is ***not enabled*** program will not keep botted viewers alive and try to make as much connections until server timeout for dead guests (it was work sometime ago, now its equals to zero)
-<br></br>
 
 # Build
 * generate `.sln` file by [premake5](https://premake.github.io/) for Visual Studio version with fully support c++14 (vs2017 or higher)
 * Open `.sln` file in `build/`
 * Select Release or Debug build
 * Hit `Build solution`
-<br></br>
 
 # Contents of `src/`
 `Shared` - shared code between app and modules\
 `Base` - main executable app\
 `Utils` - utils that used only by modules\
 `Tvl` - Trovo viewbot module\
-<br></br>
 
 # 3rd party solutions used
 * Base64 - [cppbase64](https://github.com/ReneNyffenegger/cpp-base64)
