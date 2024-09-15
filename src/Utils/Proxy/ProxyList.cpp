@@ -4,24 +4,11 @@
 #include "Shared/Network/NetAddr.hpp"
 
 
-CProxyList::CProxyList(void)
-: m_vecNetAddr()
-{
-    ;
-};
-
-
-CProxyList::~CProxyList(void)
-{
-    ;
-};
-
-
-bool CProxyList::open(const char* Path)
+bool proxylist::open(const std::string& path)
 {
     bool bResult = false;
     
-    HOBJ hPhyFile = FileOpen(Path, "rb");
+    HOBJ hPhyFile = FileOpen(path.c_str(), "rb");
     if (hPhyFile)
     {
         uint32 uSize = uint32(FileSize(hPhyFile));
@@ -66,23 +53,23 @@ bool CProxyList::open(const char* Path)
 };
 
 
-bool CProxyList::save(const char* Path)
+bool proxylist::save(const std::string& path)
 {
     bool bResult = false;
 
-    HOBJ hPhyFile = FileOpen(Path, "wb");
+    HOBJ hPhyFile = FileOpen(path.c_str(), "wb");
     if (hPhyFile)
     {
         int32 nWritePos = 0;
-        char* pBuff = new char[(64 + 1) * m_vecNetAddr.size()];
+        char* pBuff = new char[(64 + 1) * m_netaddrs.size()];
         if (pBuff)
         {
-            for (int32 i = 0; i < int32(m_vecNetAddr.size()); ++i)
+            for (int32 i = 0; i < int32(m_netaddrs.size()); ++i)
             {
                 char NetAddrStr[64];
                 NetAddrStr[0] = '\0';
                 
-                NetAddrToString(&m_vecNetAddr[i], NetAddrStr, sizeof(NetAddrStr), ':');
+                NetAddrToString(&m_netaddrs[i], NetAddrStr, sizeof(NetAddrStr), ':');
 
                 int32 nNetAddrStrLen = std::strlen(NetAddrStr);
                 std::strncpy(&pBuff[nWritePos], NetAddrStr, nNetAddrStrLen);
@@ -105,42 +92,4 @@ bool CProxyList::save(const char* Path)
     };
 
     return bResult;
-};
-
-
-void CProxyList::insert(uint64 NetAddr)
-{
-    if (m_vecNetAddr.empty())
-        m_vecNetAddr.reserve(4096);
-    
-    m_vecNetAddr.push_back(NetAddr);
-};
-
-
-void CProxyList::clear(void)
-{
-    m_vecNetAddr.clear();
-};
-
-
-uint64 CProxyList::addr_at(int32 idx) const
-{
-    ASSERT(idx >= 0 && idx < int32(m_vecNetAddr.size()));
-    return m_vecNetAddr[idx];
-};
-
-
-int32 CProxyList::count(void) const
-{
-    return m_vecNetAddr.size();
-};
-
-
-void CProxyList::dbgprint(void)
-{
-    for (int32 i = 0; i < int32(m_vecNetAddr.size()); ++i)
-    {
-        uint64 NetAddr = m_vecNetAddr[i];
-        OUTPUTLN("%s", NetAddrToStdString(&NetAddr).c_str());
-    };
 };

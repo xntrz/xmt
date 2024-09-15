@@ -4,3 +4,10 @@
 **/.vscode/*
 *.code-workspace
 *.exe
+**/src/Ttv/*
+
+# deprecated (under cloudflare now - untestable)
+**/src/Bng/*
+
+# deprecated (no need)
+**/src/Prx/*

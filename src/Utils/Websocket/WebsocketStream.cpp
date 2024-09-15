@@ -236,7 +236,7 @@ bool CWebsocketStream::begin(int bits, unsigned features)
 	if (m_bBegin)
 		return false;
 
-	if (IS_FLAG_SET(features, FEATURE_COMPRESS))
+	if ((features & FEATURE_COMPRESS) == FEATURE_COMPRESS)
 	{
 		m_pCompressor = new CCompressor();
 		if (!m_pCompressor->Start(bits))
@@ -293,8 +293,7 @@ int CWebsocketStream::write(const void* data, int dataSize, std::vector<unsigned
 	{
 		header.rsv1 = true;
 		assert(m_pCompressor);
-		if (dataSize)
-			compressed = m_pCompressor->Deflate(data, dataSize);
+		compressed = m_pCompressor->Deflate(data, dataSize);
 		assert(!compressed.empty());
 	}
 	else
@@ -316,38 +315,30 @@ int CWebsocketStream::write(const void* data, int dataSize, std::vector<unsigned
 	else if (dataSize < std::numeric_limits<unsigned short>::max())
 	{
 		header.length = WSTYPES::LEN16;
-		unsigned short size = SWAP2(unsigned short(compressed.size()));
+		unsigned short size = byteswap2(unsigned short(compressed.size()));
 		output.insert(output.end(), (unsigned char*)&header, (unsigned char*)&header + sizeof(header));
 		output.insert(output.end(), (unsigned char*)&size, (unsigned char*)&size + sizeof(unsigned short));
 	}
 	else
 	{
 		header.length = WSTYPES::LEN64;
-		unsigned long long size = SWAP8(unsigned long long(compressed.size()));
+		unsigned long long size = byteswap8(unsigned long long(compressed.size()));
 		output.insert(output.end(), (unsigned char*)&header, (unsigned char*)&header + sizeof(header));
 		output.insert(output.end(), (unsigned char*)&size, (unsigned char*)&size + sizeof(unsigned long long));
 	};
-
+	
 	//
-	//	Append mask to msg
+	//	Mask payload if required
 	//
-	unsigned Mask = 0;
 	if ((m_features & FEATURE_MASKING) == FEATURE_MASKING)
 	{
-		Mask = RndUInt32(0x10000000, 0xFFFFFFFF);
+		unsigned Mask = RndUInt32(0x10000000, 0xFFFFFFFF);
 		output.insert(output.end(), (unsigned char*)&Mask, (unsigned char*)&Mask + sizeof(unsigned));
-	};
-
-	//
-	//	Mask payload if there is some data and if its required
-	//
-	if (compressed.size())
-	{
-		if (((m_features & FEATURE_MASKING) == FEATURE_MASKING) && compressed.size())
+		if (compressed.size())
 			WsMaskUnmask(&compressed[0], &compressed[0], compressed.size(), (char*)&Mask);
+	};	
 
-		output.insert(output.end(), compressed.begin(), compressed.end());
-	};
+	output.insert(output.end(), compressed.begin(), compressed.end());
 
 	return RESULT_OK;
 };
@@ -391,7 +382,7 @@ int CWebsocketStream::read(const void* data, int dataSize)
 				break;
 
 			unsigned short Size2 = *(unsigned short*)&m_payload[offset];
-			Size = SWAP2(Size2);
+			Size = byteswap2(Size2);
 			offset += 2;
 		}
 		else if (pHdr->length == WSTYPES::LEN64)
@@ -399,8 +390,8 @@ int CWebsocketStream::read(const void* data, int dataSize)
 			if (m_payload.size() < (offset + 8))
 				break;
 
-			unsigned long long Size8 = SWAP8(*(unsigned long long*)&m_payload[offset]);
-			Size = SWAP8(Size8);
+			unsigned long long Size8 = byteswap8(*(unsigned long long*)&m_payload[offset]);
+			Size = byteswap8(Size8);
 			offset += 8;
 		}
 		else
@@ -410,7 +401,7 @@ int CWebsocketStream::read(const void* data, int dataSize)
 
 		if (!Size)
 		{
-			m_queueMessages.push_back({ pHdr->opcode, {} });
+			m_queueMessages.push_back(message(pHdr->opcode, {}));
 			m_payload.erase(m_payload.begin(), m_payload.begin() + sizeof(*pHdr) + unsigned(Size));
 			continue;
 		};
@@ -451,7 +442,7 @@ int CWebsocketStream::read(const void* data, int dataSize)
 			output.insert(output.end(), &m_payload[offset], (unsigned char*)&m_payload[offset] + Size);
 		};
 
-		m_queueMessages.push_back({ pHdr->opcode, output });
+		m_queueMessages.push_back(message(pHdr->opcode, output));
 		m_payload.erase(m_payload.begin(), m_payload.begin() + offset + uint32(Size));
 	} while (true);
 
@@ -462,12 +453,12 @@ int CWebsocketStream::read(const void* data, int dataSize)
 };
 
 
-bool CWebsocketStream::read_message(MESSAGE& msg)
+bool CWebsocketStream::read_message(message& msg)
 {
 	if (m_queueMessages.empty())
 		return false;
 
-	msg = m_queueMessages.front();
+	msg = std::move(m_queueMessages.front());
 	m_queueMessages.pop_front();
 
 	return true;

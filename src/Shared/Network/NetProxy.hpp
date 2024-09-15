@@ -42,56 +42,54 @@
 #define NETPROXY_SOCKS5_ADDRTYPE_IPV6 				0x4
 
 
-enum NetProxy_t
+enum NETPROXY
 {
-	NetProxy_Http = 0,
-	NetProxy_Socks4,
-	NetProxy_Socks4a,
-	NetProxy_Socks5,
+	NETPROXY_HTTP = 0,
+	NETPROXY_SOCKS4,
+	NETPROXY_SOCKS4A,
+	NETPROXY_SOCKS5,
+
+	NETPROXYNUM,	
 };
 
 
-struct NetProxyHttpParam_t
+struct NETPROXYPARAM
 {
-	char UserId[NETPROXY_NAME_MAX];
-	char UserPw[NETPROXY_NAME_MAX];
-};
-
-
-struct NetProxySocks4Param_t
-{
-	char UserId[NETPROXY_NAME_MAX];
-};
-
-
-struct NetProxySocks4aParam_t
-{
-	char UserId[NETPROXY_NAME_MAX];
-	char Domain[NETPROXY_NAME_MAX];
-};
-
-
-struct NetProxySocks5Param_t
-{
-	int32 Command;
-	int32 Authtype[4];
-	int32 AuthtypeNum;
-	int32 AddrType;
 	union
 	{
-		uint32 IPv4;
-		uint8 IPv6[16];
-		char Domain[NETPROXY_NAME_MAX];
-	} Addr;
-	char UserId[NETPROXY_NAME_MAX];	// valid for AUTHTYPE_USERNAME_PASSWORD, otherwise not using
-	char UserPw[NETPROXY_NAME_MAX];	// valid for AUTHTYPE_USERNAME_PASSWORD, otherwise not using
-};
+		struct
+		{
+			char UserId[NETPROXY_NAME_MAX];
+			char UserPw[NETPROXY_NAME_MAX];
+			char EncodedValue[NETPROXY_NAME_MAX];
+			bool EncodedFlag;
+		} Http;
 
+		struct
+		{
+			char identd[NETPROXY_NAME_MAX];
+		} Socks4;
 
-union NetProxyParam_t
-{
-	NetProxyHttpParam_t Http;
-	NetProxySocks4Param_t Socks4;
-	NetProxySocks4aParam_t Socks4a;
-	NetProxySocks5Param_t Socks5;
+		struct
+		{
+			char identd[NETPROXY_NAME_MAX];
+			char Domain[NETPROXY_NAME_MAX];
+		} Socks4a;
+		
+		struct
+		{
+			int32 Command;
+			int32 Authtype[4];
+			int32 AuthtypeNum;
+			int32 AddrType;
+			union
+			{
+				uint32 IPv4;
+				uint8 IPv6[16];
+				char Domain[NETPROXY_NAME_MAX];
+			} Addr;
+			char UserId[NETPROXY_NAME_MAX];	// valid for AUTHTYPE_USERNAME_PASSWORD, otherwise not using
+			char UserPw[NETPROXY_NAME_MAX];	// valid for AUTHTYPE_USERNAME_PASSWORD, otherwise not using
+		} Socks5;
+	};
 };

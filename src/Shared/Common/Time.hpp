@@ -1,8 +1,8 @@
 #pragma once
 
 
-DLLSHARED void TimeInitialize(void);
-DLLSHARED void TimeTerminate(void);
+void TimeInitialize(void);
+void TimeTerminate(void);
 DLLSHARED uint32 TimeCurrentTick(void);
 DLLSHARED uint32 TimeCurrentTickPrecise(void);
 DLLSHARED uint32 TimeCurrentUnix32(void);

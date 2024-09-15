@@ -15,7 +15,6 @@ struct FileSystem_t
     uint64(*Tell)(HOBJ hFile);
     void(*Seek)(HOBJ hFile, int64 Offset, FileSeek_t Seek);
     void(*Sync)(HOBJ hFile);
-    bool(*SyncEx)(HOBJ hFile, uint32 Timeout);
     void(*Flush)(HOBJ hFile);
     bool(*IsEof)(HOBJ hFile);
     uint64(*Size)(HOBJ hFile);

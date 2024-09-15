@@ -2,7 +2,6 @@
 
 #include <map>
 
-
 #define REG_NAME_MAX (256)
 #define REG_CMD_ARGS_NUM (32)
 #define REG_CMD_LINE_MAX (256)
@@ -95,7 +94,7 @@ static void RegVarSet(RegVar_t* RegVar, const char* Value)
 		std::strcpy(RegVar->Value.String, Value);
 
 	if (RegVar->NotifyCallback)
-		RegVar->NotifyCallback(RegVar, Value);
+		RegVar->NotifyCallback(HOBJ(RegVar), Value);
 };
 
 
@@ -332,7 +331,7 @@ void RegTerminate(void)
 };
 
 
-void RegResetRegist(RegResetCallback_t ResetCallback)
+/*DLLSHARED*/ void RegResetRegist(RegResetCallback_t ResetCallback)
 {
 	if (RegContainer.FlagCmdExec)
 		return;
@@ -347,7 +346,7 @@ void RegResetRegist(RegResetCallback_t ResetCallback)
 };
 
 
-void RegResetExec(void)
+/*DLLSHARED*/ void RegResetExec(void)
 {
 	if (RegContainer.FlagCmdExec)
 		return;
@@ -359,7 +358,7 @@ void RegResetExec(void)
 };
 
 
-void RegRefInc(void)
+/*DLLSHARED*/ void RegRefInc(void)
 {
 	if (RegContainer.FlagCmdExec)
 		return;
@@ -370,7 +369,7 @@ void RegRefInc(void)
 };
 
 
-void RegRefDec(void)
+/*DLLSHARED*/ void RegRefDec(void)
 {
 	if (RegContainer.FlagCmdExec)
 		return;
@@ -414,7 +413,7 @@ void RegRefDec(void)
 };
 
 
-bool RegCmdRegist(const char* Cmd, RegCmdHandler_t Handler)
+/*DLLSHARED*/ bool RegCmdRegist(const char* Cmd, RegCmdHandler_t Handler)
 {
 	if (!RegIsNameValid(Cmd))
 		return false;
@@ -428,7 +427,7 @@ bool RegCmdRegist(const char* Cmd, RegCmdHandler_t Handler)
 };
 
 
-void RegCmdRemove(const char* Cmd)
+/*DLLSHARED*/ void RegCmdRemove(const char* Cmd)
 {
 	if (RegContainer.FlagCmdExec)
 		return;
@@ -441,7 +440,7 @@ void RegCmdRemove(const char* Cmd)
 };
 
 
-bool RegCmdExec(const char* Line)
+/*DLLSHARED*/ bool RegCmdExec(const char* Line)
 {
 	bool bResult = false;
 	
@@ -476,18 +475,18 @@ bool RegCmdExec(const char* Line)
 };
 
 
-HOBJ RegVarRegist(const char* Var, RegVarNotifyCallback_t Callback)
+/*DLLSHARED*/ HOBJ RegVarRegist(const char* Var, RegVarNotifyCallback_t Callback)
 {
 	if (!RegIsNameValid(Var))
 		return false;
 
 	std::unique_lock<std::recursive_mutex> Lock(RegContainer.Mutex);
 
-	return RegVarCreate(Var, Callback);
+	return HOBJ(RegVarCreate(Var, Callback));
 };
 
 
-void RegVarRemove(const char* Var)
+/*DLLSHARED*/ void RegVarRemove(const char* Var)
 {
 	std::unique_lock<std::recursive_mutex> Lock(RegContainer.Mutex);
 
@@ -497,15 +496,15 @@ void RegVarRemove(const char* Var)
 };
 
 
-HOBJ RegVarFind(const char* Var)
+/*DLLSHARED*/ HOBJ RegVarFind(const char* Var)
 {
 	std::unique_lock<std::recursive_mutex> Lock(RegContainer.Mutex);
 	
-	return RegVarSearch(Var);
+	return HOBJ(RegVarSearch(Var));
 };
 
 
-void RegVarEnum(RegVarEnumCallback_t Callback, void* Param)
+/*DLLSHARED*/ void RegVarEnum(RegVarEnumCallback_t Callback, void* Param)
 {
 	std::unique_lock<std::recursive_mutex> Lock(RegContainer.Mutex);
 
@@ -513,14 +512,14 @@ void RegVarEnum(RegVarEnumCallback_t Callback, void* Param)
 	while (RegRec)
 	{
 		if (RegRec->Type == RegRecType_Var)
-			Callback(RegRec, RegRec->Name, RegRec->Ctx.Variable.Value.String, Param);
+			Callback(HOBJ(RegRec), RegRec->Name, RegRec->Ctx.Variable.Value.String, Param);
 
 		RegRec = RegRec->Next;
 	};
 };
 
 
-void RegVarLock(const char* Var)
+/*DLLSHARED*/ void RegVarLock(const char* Var)
 {
 	std::unique_lock<std::recursive_mutex> Lock(RegContainer.Mutex);
 
@@ -530,7 +529,7 @@ void RegVarLock(const char* Var)
 };
 
 
-void RegVarUnlock(const char* Var)
+/*DLLSHARED*/ void RegVarUnlock(const char* Var)
 {
 	std::unique_lock<std::recursive_mutex> Lock(RegContainer.Mutex);
 
@@ -540,7 +539,7 @@ void RegVarUnlock(const char* Var)
 };
 
 
-void RegVarSetFlags(HOBJ hVar, uint32 Flags)
+/*DLLSHARED*/ void RegVarSetFlags(HOBJ hVar, uint32 Flags)
 {
 	RegRec_t* RegVar = (RegRec_t*)hVar;
 
@@ -548,7 +547,7 @@ void RegVarSetFlags(HOBJ hVar, uint32 Flags)
 };
 
 
-uint32 RegVarGetFlags(HOBJ hVar)
+/*DLLSHARED*/ uint32 RegVarGetFlags(HOBJ hVar)
 {
 	RegRec_t* RegVar = (RegRec_t*)hVar;
 
@@ -556,7 +555,7 @@ uint32 RegVarGetFlags(HOBJ hVar)
 };
 
 
-int32 RegVarReadInt32(HOBJ hVar)
+/*DLLSHARED*/ int32 RegVarReadInt32(HOBJ hVar)
 {
 	RegRec_t* RegVar = (RegRec_t*)hVar;
 	
@@ -564,7 +563,7 @@ int32 RegVarReadInt32(HOBJ hVar)
 };
 
 
-uint32 RegVarReadUInt32(HOBJ hVar)
+/*DLLSHARED*/ uint32 RegVarReadUInt32(HOBJ hVar)
 {
 	RegRec_t* RegVar = (RegRec_t*)hVar;
 	
@@ -572,7 +571,7 @@ uint32 RegVarReadUInt32(HOBJ hVar)
 };
 
 
-float RegVarReadFloat(HOBJ hVar)
+/*DLLSHARED*/ float RegVarReadFloat(HOBJ hVar)
 {
 	RegRec_t* RegVar = (RegRec_t*)hVar;
 
@@ -580,7 +579,7 @@ float RegVarReadFloat(HOBJ hVar)
 };
 
 
-const char* RegVarReadString(HOBJ hVar)
+/*DLLSHARED*/ const char* RegVarReadString(HOBJ hVar)
 {
 	RegRec_t* RegVar = (RegRec_t*)hVar;
 
@@ -588,7 +587,7 @@ const char* RegVarReadString(HOBJ hVar)
 };
 
 
-void RegVarReadString(HOBJ hVar, char* Buffer, int32 BufferSize)
+/*DLLSHARED*/ void RegVarReadString(HOBJ hVar, char* Buffer, int32 BufferSize)
 {
 	RegRec_t* RegVar = (RegRec_t*)hVar;
 
@@ -596,7 +595,7 @@ void RegVarReadString(HOBJ hVar, char* Buffer, int32 BufferSize)
 };
 
 
-void RegVarSetValue(HOBJ hVar, const char* pszValue)
+/*DLLSHARED*/ void RegVarSetValue(HOBJ hVar, const char* pszValue)
 {
 	RegRec_t* RegVar = (RegRec_t*)hVar;
 
@@ -604,31 +603,31 @@ void RegVarSetValue(HOBJ hVar, const char* pszValue)
 };
 
 
-double RegArgToDouble(const char* pszArgValue)
+/*DLLSHARED*/ double RegArgToDouble(const char* pszArgValue)
 {
 	return std::atof(pszArgValue);
 };
 
 
-float RegArgToReal(const char* pszArgValue)
+/*DLLSHARED*/ float RegArgToReal(const char* pszArgValue)
 {
 	return float(RegArgToDouble(pszArgValue));
 };
 
 
-unsigned RegArgToUInt32(const char* pszArgValue)
+/*DLLSHARED*/ unsigned RegArgToUInt32(const char* pszArgValue)
 {
 	return std::strtoul(pszArgValue, nullptr, 0);
 };
 
 
-int RegArgToInt32(const char* pszArgValue)
+/*DLLSHARED*/ int RegArgToInt32(const char* pszArgValue)
 {
 	return std::atoi(pszArgValue);
 };
 
 
-bool RegArgToBool(const char* pszArgValue)
+/*DLLSHARED*/ bool RegArgToBool(const char* pszArgValue)
 {
 	if (!std::strcmp(pszArgValue, "true"))
 		return true;
@@ -637,14 +636,14 @@ bool RegArgToBool(const char* pszArgValue)
 };
 
 
-bool RegIsArgBool(const char* pszArgValue)
+/*DLLSHARED*/ bool RegIsArgBool(const char* pszArgValue)
 {
 	return (!std::strcmp(pszArgValue, "true") ||
 			!std::strcmp(pszArgValue, "false"));
 };
 
 
-void RegBoolToArg(bool bValue, char* Buffer, int32 BufferSize)
+/*DLLSHARED*/ void RegBoolToArg(bool bValue, char* Buffer, int32 BufferSize)
 {
 	static const char BOOL_TRUE[] = "true";
 	static const char BOOL_FALSE[] = "false";

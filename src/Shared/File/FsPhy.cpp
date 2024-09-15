@@ -45,7 +45,6 @@ static uint32 PhyFileWrite(HOBJ hFile, const char* Buffer, uint32 BufferSize);
 static uint64 PhyFileTell(HOBJ hFile);
 static void PhyFileSeek(HOBJ hFile, int64 Offset, FileSeek_t Seek);
 static void PhyFileSync(HOBJ hFile);
-static bool PhyFileSyncEx(HOBJ hFile, uint32 Timeout);
 static void PhyFileFlush(HOBJ hFile);
 static bool PhyFileIsEof(HOBJ hFile);
 static uint64 PhyFileSize(HOBJ hFile);
@@ -179,7 +178,7 @@ static HOBJ PhyFileOpen(FileSystem_t* Fs, const char* Path, const char* Access, 
     }
     else
     {
-        OUTPUTLN("open failed path \"%s\", access \"%s\", error code %u", Path, Access, GetLastError());
+        OUTPUTLN("open failed path \"%s\", access \"%s\", error code %" PRIu32, Path, Access, GetLastError());
         PhyFileFree(PhyFile);
         PhyFile = 0;
     };
@@ -264,12 +263,6 @@ static void PhyFileSync(HOBJ hFile)
 };
 
 
-static bool PhyFileSyncEx(HOBJ hFile, uint32 Timeout)
-{
-    return true;
-};
-
-
 static void PhyFileFlush(HOBJ hFile)
 {
     PhyFile_t* PhyFile = (PhyFile_t*)hFile;
@@ -291,7 +284,7 @@ static uint64 PhyFileSize(HOBJ hFile)
     LARGE_INTEGER Size = { 0 };
 
     if (!GetFileSizeEx(PhyFile->Handle, &Size))
-        OUTPUTLN("phy file size failed %u", GetLastError());
+        OUTPUTLN("phy file size failed %" PRIu32, GetLastError());
 
     return uint64(Size.QuadPart);
 };
@@ -322,7 +315,7 @@ static bool PhyFileExist(FileSystem_t* Fs, const char* Path)
     if ((Attributes = GetFileAttributesA(Path)) == INVALID_FILE_ATTRIBUTES)
         Attributes = 0;
 
-    return IS_FLAG_SET(Attributes, FILE_ATTRIBUTE_DIRECTORY);
+	return ((Attributes & FILE_ATTRIBUTE_DIRECTORY) == FILE_ATTRIBUTE_DIRECTORY);
 };
 
 
@@ -343,7 +336,6 @@ bool PhyFsOpen(const char* Path)
     PhyFs->Tell     = PhyFileTell;
     PhyFs->Seek     = PhyFileSeek;
     PhyFs->Sync     = PhyFileSync;
-    PhyFs->SyncEx   = PhyFileSyncEx;
     PhyFs->Flush    = PhyFileFlush;
     PhyFs->IsEof    = PhyFileIsEof;
     PhyFs->Size     = PhyFileSize;

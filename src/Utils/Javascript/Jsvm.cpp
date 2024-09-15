@@ -2,11 +2,14 @@
 
 #include "duktape/duktape.h"
 
+#include "Shared/Common/Mem.hpp"
+
 
 static void* JsvmMalloc(void* UserData, duk_size_t Size)
 {
 #ifdef _DEBUG	
-    return MemAlloc(Size, __FILE__, __LINE__);
+    MemSetAllocSource(__FILE__, __LINE__);
+    return MemAlloc(Size);
 #else
     return MemAlloc(Size);
 #endif
@@ -16,7 +19,8 @@ static void* JsvmMalloc(void* UserData, duk_size_t Size)
 static void* JsvmRealloc(void* UserData, void* Ptr, duk_size_t Size)
 {
 #ifdef _DEBUG	
-    return MemRealloc(Ptr, Size, __FILE__, __LINE__);
+    MemSetAllocSource(__FILE__, __LINE__);
+    return MemRealloc(Ptr, Size);
 #else
     return MemRealloc(Ptr, Size);
 #endif
@@ -25,11 +29,7 @@ static void* JsvmRealloc(void* UserData, void* Ptr, duk_size_t Size)
 
 static void JsvmFree(void* UserData, void* Ptr)
 {
-#ifdef _DEBUG	
-    MemFree(Ptr, __FILE__, __LINE__);
-#else
     MemFree(Ptr);
-#endif
 };
 
 

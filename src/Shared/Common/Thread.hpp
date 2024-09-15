@@ -1,33 +1,29 @@
 #pragma once
 
 
-typedef void(*ThreadMainProc_t)(void* Param);
-typedef bool(*ThreadEnumProc_t)(HOBJ hThread);
-
-enum ThreadFlag_t
+namespace thread
 {
-    ThreadFlag_AutoDestroy = BIT(0),
-};
+    void initialize();
+    void terminate();
+    DLLSHARED void regist_current(const char* pszName);
+    DLLSHARED void remove_current();
+    DLLSHARED const char* current_name();
+    DLLSHARED uint32 current_id();
+    DLLSHARED uint32 current_app_id();
+    
 
-DLLSHARED void ThreadInitialize(void);
-DLLSHARED void ThreadTerminate(void);
-DLLSHARED HOBJ ThreadCallbackRegist(void(*FnThreadStart)(HOBJ hThread), void(*FnThreadStop)(HOBJ hThread));
-DLLSHARED void ThreadCallbackRemove(HOBJ hCallback);
-DLLSHARED HOBJ ThreadCreate(const char* Name, ThreadMainProc_t ThreadMainPrc, uint32 Flags = 0, void* Param = nullptr);
-DLLSHARED void ThreadDestroy(HOBJ hThread);
-DLLSHARED void ThreadSuspend(HOBJ hThread);
-DLLSHARED void ThreadResume(HOBJ hThread);
-DLLSHARED void ThreadWait(HOBJ hThread);
-DLLSHARED bool ThreadWait(HOBJ hThread, uint32 Ms);
-DLLSHARED bool ThreadIsExited(HOBJ hThread);
-DLLSHARED uint32 ThreadGetId(HOBJ hThread);
-DLLSHARED const char* ThreadGetName(HOBJ hThread);
-DLLSHARED uint32 ThreadGetId(void);
-DLLSHARED const char* ThreadGetName(void);
-DLLSHARED HOBJ ThreadCurrent(void);
-DLLSHARED void ThreadSleep(uint32 Ms);
-DLLSHARED void ThreadEnumerate(ThreadEnumProc_t ThreadEnumProc);
-DLLSHARED void ThreadSuspendAllExceptThis(void);
-DLLSHARED void ThreadResumeAllExceptThis(void);
-DLLSHARED int32 ThreadGetCoreNum(void);
-DLLSHARED int32 ThreadGetProcessorNum(void);
+    template<class Function, class ...Args>
+    inline void __main(const std::string& name, Function&& f, Args&&... args)
+    {
+        regist_current(name.c_str());
+        f(std::forward<Args>(args) ...);
+        remove_current();
+    };
+
+
+    template<class Function, class... Args>
+    inline std::thread spawn(const std::string& name, Function&& f, Args&&... args)
+    {
+        return std::thread(&__main<Function&&, Args&&...>, name, std::forward<Function>(f), std::forward<Args>(args)...);
+    };
+};

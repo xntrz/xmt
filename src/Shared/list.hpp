@@ -1,44 +1,25 @@
 #pragma once
 
 
-class CListNodeDefaultTag
-{
-public:
-
-};
+class CListDefaultTag {};
 
 
-template<class T, class tag = CListNodeDefaultTag>
+template<class T, class tag = CListDefaultTag>
 class CListNode
 {
 public:
     CListNode(const CListNode&) = delete;
     const CListNode& operator=(const CListNode&) = delete;
 
+    inline CListNode() : next(nullptr), prev(nullptr), data((T*)this) {};
+    inline bool is_linked() const { return (next && prev); };
 
-    inline CListNode(void)
-        : next(nullptr)
-        , prev(nullptr)
-        , data((T*)this)
-    {
-        ;
-    };
-
-
-    inline bool is_linked(void) const
-    {
-        return (next && prev);
-    };
-
-
-    inline void unlink(void)
+    inline void unlink()
     {
         prev->next = next;
         next->prev = prev;
-
         next = prev = nullptr;
     };
-
 
     CListNode<T, tag>* next;
     CListNode<T, tag>* prev;
@@ -46,11 +27,11 @@ public:
 };
 
 
-template<class T, class tag = CListNodeDefaultTag>
+template<class T, class tag = CListDefaultTag>
 class CList : public CListNode<T, tag>
 {
 public:
-    typedef T           value_type;
+    typedef T value_type;
     typedef T& reference;
     typedef const T& const_reference;
     typedef T* pointer;
@@ -58,65 +39,48 @@ public:
 
 
     template<class Ty>
-    class iterator_base : public std::iterator<std::bidirectional_iterator_tag, T>
+    class iterator_base
     {
     public:
-        typedef T value_type;
-        typedef T* pointer;
-        typedef T& reference;
+        using iterator_category = std::bidirectional_iterator_tag;
+        using value_type = T;
+        using difference_type = T;
+        using pointer = T*;
+        using reference = T&;
 
+        inline iterator_base() : m_list(nullptr), m_node(nullptr) {};
+        inline iterator_base(Ty* list, Ty* node) : m_list(list), m_node(node) {};
+        inline iterator_base(const iterator_base& it) : m_list(it.m_list), m_node(it.m_node) {};
 
-        inline iterator_base(Ty* list, Ty* node)
-        : m_list(list)
-        , m_node(node)
-        {
-            ;
-        };
-
-
-        inline iterator_base(const iterator_base& it)
-        : m_list(it.m_list)
-        , m_node(it.m_node)
-        {
-            ;
-        };
-
-
-        inline bool is_end(void)
+        inline bool is_end()
         {
             return (m_node == m_list);
         };
 
-
-        inline Ty* node(void)
+        inline Ty* node()
         {
             return m_node;
         };
 
-
-        inline iterator_base prev(void)
+        inline iterator_base prev()
         {
             return iterator_base(m_list, m_node->prev);
         };
 
-
-        inline iterator_base next(void)
+        inline iterator_base next()
         {
             return iterator_base(m_list, m_node->next);
         };
-
 
         inline bool operator==(const iterator_base& it) const
         {
             return ((m_list == it.m_list) && (m_node == it.m_node));
         };
 
-
         inline bool operator!=(const iterator_base& it) const
         {
             return ((m_list == it.m_list) && (m_node != it.m_node));
         };
-
 
         inline iterator_base operator++(int)
         {
@@ -125,7 +89,6 @@ public:
             return self;
         };
 
-
         inline iterator_base operator--(int)
         {
             auto self = *this;
@@ -133,173 +96,142 @@ public:
             return self;
         };
 
-
-        inline iterator_base& operator++(void)
+        inline iterator_base& operator++()
         {
             *this = next();
             return *this;
         };
 
-
-        inline iterator_base& operator--(void)
+        inline iterator_base& operator--()
         {
             *this = prev();
             return *this;
         };
 
-
-        inline explicit operator bool(void)
+        inline explicit operator bool()
         {
             return (!is_end());
         };
 
-
-        inline reference operator*(void) const
+        inline reference operator*() const
         {
             return *m_node->data;
         };
 
-
-        inline pointer operator->(void) const
+        inline pointer operator->() const
         {
             return m_node->data;
         };
-
 
     protected:
         Ty* m_node;
         Ty* m_list;
     };
 
-
     typedef iterator_base<CListNode<T, tag>> iterator;
     typedef iterator_base<const CListNode<T, tag>> const_iterator;
 
-
 public:
-    inline CList(void)
+    inline CList()
     {
         clear();
     };
-
-
-    inline ~CList(void)
-    {
-        ;
-    };
-
 
     inline CList(const CList<T, tag>& other)
     {
         *this = other;
     };
 
-
     inline const CList<T, tag>& operator=(const CList<T, tag>& other)
     {
-        next = other.next;
-        prev = other.prev;
-        data = other.data;
+        this->next = other.next;
+        this->prev = other.prev;
+        this->data = other.data;
         return *this;
     };
 
-
-    inline void clear(void)
+    inline void clear()
     {
-        data = nullptr;
-        next = prev = this;
+        this->data = nullptr;
+        this->next = this->prev = this;
     };
 
-
-    inline bool empty(void) const
+    inline bool empty() const
     {
-        return (prev == this);
+        return (this->prev == this);
     };
 
-
-    inline pointer front(void)
+    inline pointer front()
     {
         if (empty())
             return nullptr;
         else
-            return static_cast<T*>(next);
+            return static_cast<T*>(this->next);
     };
 
-
-    inline pointer front(void) const
+    inline pointer front() const
     {
         if (empty())
             return nullptr;
         else
-            return static_cast<T*>(next);
+            return static_cast<T*>(this->next);
     };
 
-
-    inline pointer back(void)
+    inline pointer back()
     {
         if (empty())
             return nullptr;
         else
-            return static_cast<T*>(prev);
+            return static_cast<T*>(this->prev);
     };
 
-
-    inline pointer back(void) const
+    inline pointer back() const
     {
         if (empty())
             return nullptr;
         else
-            return static_cast<T*>(prev);
+            return static_cast<T*>(this->prev);
     };
 
-
-    inline iterator begin(void)
+    inline iterator begin()
     {
-        return iterator(this, next);
+        return iterator(this, this->next);
     };
 
-
-    inline iterator end(void)
+    inline iterator end()
     {
         return iterator(this, this);
     };
 
-
-    inline const_iterator begin(void) const
+    inline const_iterator begin() const
     {
-        return const_iterator(this, next);
+        return const_iterator(this, this->next);
     };
 
-
-    inline const_iterator end(void) const
+    inline const_iterator end() const
     {
         return const_iterator(this, this);
     };
-
 
     inline void push_front(iterator it)
     {
         push_front(it.node());
     };
 
-
     inline void push_front(CListNode<T, tag>* node)
     {
-        insert(iterator(this, next), node);
+        insert(iterator(this, this->next), node);
     };
-
 
     inline void push_back(iterator it)
     {
         push_back(it.node());
     };
 
-
     inline void push_back(CListNode<T, tag>* node)
     {
-        insert(iterator(this, prev->next), node);
+        insert(iterator(this, this->prev->next), node);
     };
-
 
     inline iterator insert(iterator pos, CListNode<T, tag>* node)
     {
@@ -315,24 +247,20 @@ public:
         return result;
     };
 
-
-    inline void pop_front(void)
+    inline void pop_front()
     {
-        erase(next);
+        erase(this->next);
     };
 
-
-    inline void pop_back(void)
+    inline void pop_back()
     {
-        erase(prev);
+        erase(this->prev);
     };
-
 
     inline iterator erase(CListNode<T, tag>* node)
     {
         return erase(iterator(this, node));
     };
-
 
     inline iterator erase(iterator it)
     {
@@ -350,29 +278,27 @@ public:
         return result;
     };
 
-
     inline void merge(CList<T, tag>* list)
     {
         if (list->empty())
             return;
 
-        prev->next = list->next;
-        list->next->prev = prev;
+        this->prev->next = list->next;
+        list->next->prev = this->prev;
 
         list->prev->next = this;
-        prev = list->prev;
+        this->prev = list->prev;
 
         list->clear();
     };
-
 
     inline void swap(CList<T, tag>* list)
     {
         if (empty() || list->empty())
             return;
 
-        next->prev = list;
-        prev->next = list;
+        this->next->prev = list;
+        this->prev->next = list;
 
         list->next->prev = this;
         list->prev->next = this;
@@ -382,15 +308,17 @@ public:
         *this = temp;
     };
 
-
     inline bool contains(const CListNode<T, tag>* node) const
     {
-        for (auto& it : *this)
-        {
-            if (&it == node)
-                return true;
-        };
+        return std::any_of(begin(), end(), [ & ](CListNode<T, tag>& n) { return (node == &n); });
+    };
 
-        return false;
+    inline pointer search(std::size_t no)
+    {
+        ASSERT(no >= 0 && no < std::distance(begin(), end()));
+
+        iterator it = begin();
+        std::advance(it, no);
+        return &(*it);
     };
 };

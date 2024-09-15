@@ -1,8 +1,8 @@
 #include "NetSsl.hpp"
-#include "NetSettings.hpp"
+//#include "NetSettings.hpp"
 
 #include "Shared/File/File.hpp"
-#include "Shared/Common/Thread.hpp"
+#include "Shared/Common/Mem.hpp"
 
 
 struct CRYPTO_dynlock_value
@@ -24,6 +24,7 @@ struct SslContainer_t
         void*(*Realloc)(void*, size_t, const char*, int);
         void(*Free)(void*, const char*, int);
     } DefMemFunctions;
+    bool CertLoaded;
 };
 
 
@@ -36,6 +37,40 @@ static void NetSslDynlock_LockCallback(int32 mode, CRYPTO_dynlock_value* lock, c
 static void NetSslDynlock_LockingCallback(int32 mode, int32 no, const char* file, int32 line);
 
 
+static void* NetSslMemAlloc(size_t size, const char* fname, int fline)
+{
+#ifdef _DEBUG
+    MemSetAllocSource(fname ? fname : __FILE__, fline ? fline : __LINE__);
+    return MemAlloc(size);
+#else
+    (void)fname;
+    (void)fline;
+    return MemAlloc(size);
+#endif
+};
+
+
+static void* NetSslMemRealloc(void* ptr, size_t size, const char* fname, int fline)
+{
+#ifdef _DEBUG
+    MemSetAllocSource(fname ? fname : __FILE__, fline ? fline : __LINE__);
+    return MemRealloc(ptr, size);
+#else
+    (void)fname;
+    (void)fline;
+    return MemRealloc(ptr, size);
+#endif
+};
+
+
+static void NetSslMemFree(void* ptr, const char* fname, int fline)
+{
+    (void)fname;
+    (void)fline;
+    MemFree(ptr);
+};
+
+
 static bool NetSslMemInitialize(void)
 {
 	CRYPTO_get_mem_functions(
@@ -45,9 +80,9 @@ static bool NetSslMemInitialize(void)
     );
 
     int32 Result = CRYPTO_set_mem_functions(
-        MemAlloc,
-        MemRealloc,
-        MemFree
+        NetSslMemAlloc,
+        NetSslMemRealloc,
+        NetSslMemFree
     );
 
     ASSERT(Result > 0);
@@ -222,15 +257,10 @@ static void NetSslThreadStopCallback(HOBJ hThread)
 };
 
 
-bool NetSslInitialize(NetSslCtxType_t CtxType)
+/*static*/ bool CNetSsl::Initialize(CTXTYPE CtxType)
 {
     if (!NetSslMemInitialize())
         return false;
-
-    //
-    //  Regist thread stop callback for cleanup all per thread openssl data
-    //
-    ThreadCallbackRegist(nullptr, NetSslThreadStopCallback);
 
     SSL_load_error_strings();
     
@@ -252,8 +282,7 @@ bool NetSslInitialize(NetSslCtxType_t CtxType)
         TLSv1_2_method,
     };
 
-    ASSERT(CtxType >= 0 && CtxType < NetSslCtxTypeNum);
-    static_assert(COUNT_OF(NetSslCtxMethodFn) == NetSslCtxTypeNum, "update me");
+    static_assert(COUNT_OF(NetSslCtxMethodFn) == CTXTYPENUM, "update me");
 
     SslContainer.Ctx = SSL_CTX_new(NetSslCtxMethodFn[CtxType]());
     ASSERT(SslContainer.Ctx);
@@ -265,24 +294,26 @@ bool NetSslInitialize(NetSslCtxType_t CtxType)
     //  Generate test key/cert pair:
     //  openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:2048 -keyout privateKey.key -out certificate.crt
     //
-	if (NetSettings.SslPathCert[0] != '\0')
-	{
-		if (!NetSslReadCertOrKey(NetSettings.SslPathCert))
-			return false;
-	};
-
-	if (NetSettings.SslPathKey[0] != '\0')
-	{
-		if (!NetSslReadCertOrKey(NetSettings.SslPathKey))
-			return false;
-    };
+	//if (NetSettings.SslPathCert[0] != '\0')
+	//{
+	//	if (!NetSslReadCertOrKey(NetSettings.SslPathCert))
+	//		return false;
+	//};
+	//
+	//if (NetSettings.SslPathKey[0] != '\0')
+	//{
+	//	if (!NetSslReadCertOrKey(NetSettings.SslPathKey))
+	//		return false;
+    //};
+    //
+    // SslContainer.CertLoaded = true;
 #endif    
 
     return true;
 };
 
 
-void NetSslTerminate(void)
+/*static*/ void CNetSsl::Terminate(void)
 {
     ASSERT(SslContainer.ObjRef == 0);
 
@@ -309,7 +340,19 @@ void NetSslTerminate(void)
 };
 
 
-int32 NetSslGetError(SSL* Ssl, int32 Result)
+/*static*/ bool CNetSsl::IsInitialized(void)
+{
+    return true;
+};
+
+
+/*static*/ bool CNetSsl::IsCertLoaded()
+{
+	return SslContainer.CertLoaded;
+};
+
+
+/*static*/ int32 CNetSsl::GetError(SSL* Ssl, int32 Result)
 {
     int32 Error = SSL_get_error(Ssl, Result);
     if (SSL_ERROR_NONE != Error)
@@ -319,8 +362,8 @@ int32 NetSslGetError(SSL* Ssl, int32 Result)
         while (ErrorCode != SSL_ERROR_NONE)
         {
             ERR_error_string_n(ErrorCode, Message, COUNT_OF(Message));
-            if (NetSslIsFatalError(ErrorCode))
-                OUTPUTLN("SSL ERROR %d - %s", ErrorCode, Message);
+            if (CNetSsl::IsFatalError(ErrorCode))
+                OUTPUTLN("SSL ERROR %" PRIi32 " - %s", ErrorCode, Message);
 
             ErrorCode = ERR_get_error();
         };
@@ -330,7 +373,7 @@ int32 NetSslGetError(SSL* Ssl, int32 Result)
 };
 
 
-bool NetSslIsFatalError(int32 SslError)
+/*static*/ bool CNetSsl::IsFatalError(int32 SslError)
 {
     switch (SslError)
     {
@@ -348,13 +391,13 @@ bool NetSslIsFatalError(int32 SslError)
 };
 
 
-bool NetSslIsEOF(int32 SslError)
+/*static*/ bool CNetSsl::IsEof(int32 SslError)
 {
     return (SslError == SSL_ERROR_ZERO_RETURN);
 };
 
 
-SSL* NetSslAlloc(void)
+/*static*/ SSL* CNetSsl::Alloc(void)
 {
     SSL* pSSL = SSL_new(SslContainer.Ctx);
     if (pSSL)
@@ -364,7 +407,7 @@ SSL* NetSslAlloc(void)
 };
 
 
-void NetSslFree(SSL* Ssl)
+/*static*/ void CNetSsl::Free(SSL* Ssl)
 {
     ASSERT(Ssl);
     SSL_free(Ssl);
@@ -374,7 +417,7 @@ void NetSslFree(SSL* Ssl)
 };
 
 
-void NetSslShutdown(SSL* Ssl)
+/*static*/ void CNetSsl::Shutdown(SSL* Ssl)
 {
     ASSERT(Ssl);
     
@@ -383,13 +426,13 @@ void NetSslShutdown(SSL* Ssl)
         int32 iResult = SSL_shutdown(Ssl);
         if (iResult < 0)
         {
-            int32 iErrorCode = NetSslGetError(Ssl, iResult);
+            int32 iErrorCode = CNetSsl::GetError(Ssl, iResult);
         };
     };
 };
 
 
-void NetSslThreadCleanup(void)
+/*static*/ void CNetSsl::ThreadCleanup(void)
 {
     ERR_remove_state(0);
     OPENSSL_thread_stop();

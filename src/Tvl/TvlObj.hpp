@@ -1,5 +1,5 @@
 #pragma once
 
-void TvlObjStart(void);
-void TvlObjStop(void);
-bool TvlObjIsEol(void);
+void TvlObjInitialize();
+void TvlObjTerminate();
+bool TvlObjIsStopped();

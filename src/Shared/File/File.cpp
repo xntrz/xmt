@@ -11,7 +11,7 @@ bool FileInitialize(void)
 	if (!FSysOpen())
 		return false;
 	
-	if (!PhyFsOpen(CfgGetCurrentDirA()))
+	if (!PhyFsOpen(CfgGetCurrentDir()))
 		return false;
 	
 	if (!RcFsOpen())
@@ -35,7 +35,7 @@ void FileTerminate(void)
 };
 
 
-HOBJ FileOpen(const char* Path, const char* Access, void* Param)
+/*DLLSHARED*/ HOBJ FileOpen(const char* Path, const char* Access, void* Param)
 {
 	FileSystem_t* Fs = FSysSearchByPath(Path);
 	if (Fs)
@@ -51,7 +51,7 @@ HOBJ FileOpen(const char* Path, const char* Access, void* Param)
 };
 
 
-void FileClose(HOBJ hFile)
+/*DLLSHARED*/ void FileClose(HOBJ hFile)
 {
 	File_t* File = (File_t*)hFile;
 
@@ -59,7 +59,7 @@ void FileClose(HOBJ hFile)
 };
 
 
-uint32 FileRead(HOBJ hFile, char* Buffer, uint32 BufferSize)
+/*DLLSHARED*/ uint32 FileRead(HOBJ hFile, char* Buffer, uint32 BufferSize)
 {
 	File_t* File = (File_t*)hFile;
 
@@ -67,7 +67,7 @@ uint32 FileRead(HOBJ hFile, char* Buffer, uint32 BufferSize)
 };
 
 
-uint32 FileWrite(HOBJ hFile, const char* Buffer, uint32 BufferSize)
+/*DLLSHARED*/ uint32 FileWrite(HOBJ hFile, const char* Buffer, uint32 BufferSize)
 {
 	File_t* File = (File_t*)hFile;
 
@@ -75,7 +75,7 @@ uint32 FileWrite(HOBJ hFile, const char* Buffer, uint32 BufferSize)
 };
 
 
-uint64 FileTell(HOBJ hFile)
+/*DLLSHARED*/ uint64 FileTell(HOBJ hFile)
 {
 	File_t* File = (File_t*)hFile;
 
@@ -83,7 +83,7 @@ uint64 FileTell(HOBJ hFile)
 };
 
 
-void FileSeek(HOBJ hFile, int64 Offset, FileSeek_t Seek)
+/*DLLSHARED*/ void FileSeek(HOBJ hFile, int64 Offset, FileSeek_t Seek)
 {
 	File_t* File = (File_t*)hFile;
 
@@ -91,7 +91,7 @@ void FileSeek(HOBJ hFile, int64 Offset, FileSeek_t Seek)
 };
 
 
-void FileSync(HOBJ hFile)
+/*DLLSHARED*/ void FileSync(HOBJ hFile)
 {
 	File_t* File = (File_t*)hFile;
 
@@ -99,15 +99,7 @@ void FileSync(HOBJ hFile)
 };
 
 
-bool FileSyncEx(HOBJ hFile, uint32 Timeout)
-{
-	File_t* File = (File_t*)hFile;
-
-	return File->Fs->SyncEx(hFile, Timeout);
-};
-
-
-void FileFlush(HOBJ hFile)
+/*DLLSHARED*/ void FileFlush(HOBJ hFile)
 {
 	File_t* File = (File_t*)hFile;
 
@@ -115,7 +107,7 @@ void FileFlush(HOBJ hFile)
 };
 
 
-bool FileIsEof(HOBJ hFile)
+/*DLLSHARED*/ bool FileIsEof(HOBJ hFile)
 {
 	File_t* File = (File_t*)hFile;
 
@@ -123,7 +115,7 @@ bool FileIsEof(HOBJ hFile)
 };
 
 
-uint64 FileSize(HOBJ hFile)
+/*DLLSHARED*/ uint64 FileSize(HOBJ hFile)
 {
 	File_t* File = (File_t*)hFile;
 
@@ -131,7 +123,7 @@ uint64 FileSize(HOBJ hFile)
 };
 
 
-FileStat_t FileStat(HOBJ hFile)
+/*DLLSHARED*/ FileStat_t FileStat(HOBJ hFile)
 {
 	File_t* File = (File_t*)hFile;
 
@@ -139,7 +131,7 @@ FileStat_t FileStat(HOBJ hFile)
 };
 
 
-int32 FileError(HOBJ hFile)
+/*DLLSHARED*/ int32 FileError(HOBJ hFile)
 {
 	File_t* File = (File_t*)hFile;
 
@@ -147,7 +139,7 @@ int32 FileError(HOBJ hFile)
 };
 
 
-bool FileAbort(HOBJ hFile)
+/*DLLSHARED*/ bool FileAbort(HOBJ hFile)
 {
 	File_t* File = (File_t*)hFile;
 	
@@ -155,7 +147,7 @@ bool FileAbort(HOBJ hFile)
 };
 
 
-bool FileExist(const char* Path)
+/*DLLSHARED*/ bool FileExist(const char* Path)
 {
 	FileSystem_t* Fs = FSysSearchByPath(Path);
 	if (Fs)
@@ -165,7 +157,7 @@ bool FileExist(const char* Path)
 };
 
 
-bool FileDelete(const char* Path)
+/*DLLSHARED*/ bool FileDelete(const char* Path)
 {
 	FileSystem_t* Fs = FSysSearchByPath(Path);
 	if (Fs)

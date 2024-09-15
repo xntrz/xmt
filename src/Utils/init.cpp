@@ -1,4 +1,5 @@
 #include "init.hpp"
+#include "module_obj.hpp"
 
 #include "Json/Json.hpp"
 #include "Http/HttpReq.hpp"
@@ -9,22 +10,20 @@
 
 void UtilsInitialize(void)
 {
+    module_obj_init();
     CHtmlObj::Initialize();
     CJsvm::Initialize();
-    CJson::Initialize();
-    CHttpReq::initialize();
-    CWebsocket::initialize();
+    CJson::Initialize();;
 };
 
 
 void UtilsTerminate(void)
 {
-    CHttpReq::cancel_all();
-    CWebsocket::abort_all();
+    /* if lib used in dll prevent it to unload or exit while any module obj exists */
+    module_obj_wait_removes();
     
-    CWebsocket::terminate();
-    CHttpReq::terminate();
     CJson::Terminate();
     CJsvm::Terminate();
     CHtmlObj::Terminate();
+    module_obj_term();
 };

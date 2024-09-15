@@ -1,73 +1,14 @@
 #pragma once
 
-#define MEM_ALIGN (sizeof(long double))
+void* operator new(std::size_t size);
+void* operator new[](std::size_t size);
+void operator delete(void* ptr);
+void operator delete[](void* ptr);
+void* operator new(std::size_t size, const std::nothrow_t& nth);
+void* operator new[](std::size_t size, const std::nothrow_t& nth);
 
 
-extern DLLSHARED void* MemAlloc(std::size_t size, const char* fname = nullptr, int32 fline = 0);
-extern DLLSHARED void MemFree(void* ptr, const char* fname = nullptr, int32 fline = 0);
-extern DLLSHARED void* MemRealloc(void* ptr, std::size_t size, const char* fname = nullptr, int32 fline = 0);
+extern DLLSHARED void MemSetAllocSource(const char* fname, int32 fline);
 
-
-inline void* operator new(std::size_t size)
-{
-    return MemAlloc(size);
-};
-
-
-inline void* operator new[](std::size_t size)
-{
-    return MemAlloc(size);
-};
-
-
-inline void* operator new(std::size_t size, const char* fname, int32 fline)
-{
-    return MemAlloc(size, fname, fline);
-};
-
-
-inline void* operator new[](std::size_t size, const char* fname, int32 fline)
-{
-    return MemAlloc(size, fname, fline);
-};
-
-
-inline void operator delete(void* ptr)
-{
-    MemFree(ptr);
-};
-
-
-inline void operator delete[](void* ptr)
-{
-    MemFree(ptr);
-};
-
-
-inline void operator delete(void* ptr, const char* fname, int32 fline)
-{
-    MemFree(ptr, fname, fline);
-};
-
-
-inline void operator delete[](void* ptr, const char* fname, int32 fline)
-{
-    MemFree(ptr, fname, fline);
-};
-
-
-inline void* operator new(std::size_t size, const std::nothrow_t& nth)
-{
-    return MemAlloc(size);
-};
-
-
-inline void* operator new[](std::size_t size, const std::nothrow_t& nth)
-{
-    return MemAlloc(size);
-};
-
-
-#ifdef _DEBUG
-#define new new(__FILE__, __LINE__)
-#endif
+/* using __FILENAME__ macro from debug.hpp */
+#define new (MemSetAllocSource(__FILENAME__, __LINE__), 0) ? NULL : new

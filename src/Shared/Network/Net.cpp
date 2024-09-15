@@ -1,138 +1,183 @@
 #include "Net.hpp"
-#include "NetSSL.hpp"
+#include "NetSsl.hpp"
 #include "NetAddr.hpp"
-#include "NetSockUtils.hpp"
-#include "NetSettings.hpp"
-#include "TcpNetwork.hpp"
+
+#include "Tcp/TcpNetwork.hpp"
+
+
+class CNet
+{
+public:
+	inline CNet(void) {};
+	inline ~CNet(void) {};
+	inline CTcpNetwork& Tcp(void) { return m_TcpNetwork; };
+	std::string UrlExtractPort(const std::string& Url);
+	std::string UrlExtractProto(const std::string& Url);
+	std::string UrlExtractDomain(const std::string& Url);
+
+private:
+	CTcpNetwork m_TcpNetwork;
+};
+
+
+std::string CNet::UrlExtractPort(const std::string& Url)
+{
+	auto p0 = Url.find("://");
+	if (p0 != std::string::npos)
+		p0 += 3;
+	else
+		p0 = 0;
+
+	auto p1 = Url.find_first_of(':', p0);
+	if (p1 != std::string::npos)
+	{
+		++p1;
+		auto p2 = Url.find_first_of('/', p1);
+		return Url.substr(p1, (p2 != std::string::npos ? (p2 - p1) : p2));
+	};
+
+	return{};
+};
+
+
+std::string CNet::UrlExtractProto(const std::string& Url)
+{
+	auto p0 = Url.find("://");
+	if (p0 != std::string::npos)
+		return Url.substr(0, p0);
+	else
+		return{};
+};
+
+
+std::string CNet::UrlExtractDomain(const std::string& Url)
+{
+	auto p0 = Url.find("://");
+	if (p0 != std::string::npos)
+		p0 += 3;
+	else
+		p0 = 0;
+
+	auto p1 = Url.find_first_of(':', p0);
+	if (p1 != std::string::npos)
+		return Url.substr(p0, p1 - p0);
+
+	auto p2 = Url.find_first_of('/', p0);
+	if (p2 != std::string::npos)
+		return Url.substr(p0, p2 - p0);
+
+	return Url.substr(p0, p2);
+};
+
+
+static CNet* s_pNet = nullptr;
+
+
+static inline CNet& Net(void)
+{
+	return *s_pNet;
+};
 
 
 bool NetInitialize(void)
 {
-	NetSettingsInitialize();
-	NetWsaInitialize();
-	if (NetWsaStart())
+	if (CNetSsl::Initialize(CNetSsl::CTXTYPE_TLS12))
 	{
-		NetSslInitialize(NetSslCtxType_tls12);
-		TcpNetInitialize();
-		
+		s_pNet = new CNet;
 		return true;
-	}
-	else
-	{
-		NetWsaTerminate();
-		
-		return false;
 	};
+
+	return false;
 };
 
 
 void NetTerminate(void)
 {
-	TcpNetTerminate();
-	NetSslTerminate();
-	NetWsaStop();
-	NetWsaTerminate();
-	NetSettingsTerminate();
+	if (s_pNet)
+	{
+		delete s_pNet;
+		s_pNet = nullptr;
+	};
+	
+	CNetSsl::Terminate();
 };
 
 
-void NetTcpSetNotifySent(HOBJ hConn, bool Flag)
+/*DLLSHARED*/ HCONN NetTcpOpen(NETEVENTPROC EventProc, void* Param)
 {
-	TcpNetSetNotifySent(hConn, Flag);
+	return Net().Tcp().Open(EventProc, Param);
 };
 
 
-void NetTcpSetForceClose(HOBJ hConn, bool Flag)
+/*DLLSHARED*/ void NetTcpClose(HCONN hConn)
 {
-	TcpNetSetForceClose(hConn, Flag);
+	Net().Tcp().Close(hConn);
 };
 
 
-bool NetTcpSetTimeoutRead(HOBJ hConn, uint32 Timeout)
+/*DLLSHARED*/ HCONN NetTcpCopy(HCONN hConn)
 {
-	return TcpNetSetTimeoutRead(hConn, Timeout);
+	return Net().Tcp().Copy(hConn);
 };
 
 
-void NetTcpSetUserParam(HOBJ hConn, void* userparam)
+/*DLLSHARED*/ HCONN NetTcpAccept(HCONN hConn)
 {
-	TcpNetSetUserParam(hConn, userparam);
+	return Net().Tcp().Accept(hConn);
 };
 
 
-void* NetTcpGetUserParam(HOBJ hConn)
-{
-	return TcpNetGetUserParam(hConn);
-};
-
-
-bool NetTcpSetProxy(HOBJ hConn, NetProxy_t ProxyType, uint64 NetAddr, void* Parameter, int32 ParameterLen)
-{
-	return TcpNetSetProxy(hConn, ProxyType, NetAddr, Parameter, ParameterLen);
-};
-
-
-bool NetTcpClearProxy(HOBJ hConn)
-{
-	return TcpNetClearProxy(hConn);
-};
-
-
-bool NetTcpSetSecure(HOBJ hConn, bool Flag)
-{
-	return TcpNetSetSecurity(hConn, Flag);
-};
-
-
-bool NetTcpSetSecureHost(HOBJ hConn, const char* Hostname)
-{
-	return TcpNetSetSecurityHost(hConn, Hostname);
-};
-
-
-HOBJ NetTcpOpen(NetEventProc_t EventProc, void* Param)
-{
-	return TcpNetOpen(EventProc, Param);
-};
-
-
-void NetTcpClose(HOBJ hConn)
-{
-	TcpNetClose(hConn);
-};
-
-
-HOBJ NetTcpCopy(HOBJ hConn)
-{
-	return TcpNetCopy(hConn);
-};
-
-
-bool NetTcpConnect(HOBJ hConn, uint64 NetAddr, uint32 Timeout)
+/*DLLSHARED*/ bool NetTcpConnect(HCONN hConn, uint64 NetAddr, uint32 Timeout)
 {
 	return NetTcpConnect(hConn, NetAddrIp(&NetAddr), NetAddrPort(&NetAddr), Timeout);
 };
 
 
-bool NetTcpConnect(HOBJ hConn, uint32 Ip, uint16 Port, uint32 Timeout)
+/*DLLSHARED*/ bool NetTcpConnect(HCONN hConn, uint32 Ip, uint16 Port, uint32 Timeout)
 {
-	return TcpNetConnect(hConn, Ip, Port, Timeout);
+	return Net().Tcp().Connect(hConn, Ip, Port, Timeout);
 };
 
 
-bool NetTcpConnect(HOBJ hConn, const char* Hostname, uint16 Port, uint32 Timeout)
+/*DLLSHARED*/ bool NetTcpConnect(HCONN hConn, const char* Hostname, uint16 Port, uint32 Timeout)
 {
 	uint32 IpAddrArray[4] = { 0 };
-	int32 IpAddrArrayCount = COUNT_OF(IpAddrArray);
+	int32 IpAddrArrayCnt = COUNT_OF(IpAddrArray);
 
-	if (NetGetAddrinfo(Hostname, IpAddrArray, &IpAddrArrayCount))
+	if (Net().Tcp().GetAddrinfo(Hostname, IpAddrArray, &IpAddrArrayCnt))
 		return NetTcpConnect(hConn, IpAddrArray[0], Port, Timeout);
 	else
 		return false;
 };
 
 
-bool NetTcpConnectSelf(HOBJ hConn, uint16 Port, uint32 Timeout)
+/*DLLSHARED*/ bool NetTcpConnect(HCONN hConn, const char* Url, uint32 Timeout)
+{
+	uint16 Port = 0;
+
+	std::string Domain = Net().UrlExtractDomain(Url);
+	if (Domain.empty())
+		return false;
+	
+	std::string Proto = Net().UrlExtractProto(Url);
+	if ((Proto == "https") || (Proto == "wss"))
+		Port = 443;
+
+	if (Proto.empty())
+	{
+		std::string value = Net().UrlExtractPort(Url);
+		if (!value.empty())
+			Port = uint16(std::stoul(value));
+	};
+
+	if (!Port)
+		Port = 80;
+
+	return NetTcpConnect(hConn, Domain.c_str(), Port, Timeout);
+};
+
+
+/*DLLSHARED*/ bool NetTcpConnectSelf(HCONN hConn, uint16 Port, uint32 Timeout)
 {
 	uint32 IpAddrArray[4] = { 0 };
 	int32 IpAddrArrayCount = COUNT_OF(IpAddrArray);
@@ -144,95 +189,166 @@ bool NetTcpConnectSelf(HOBJ hConn, uint16 Port, uint32 Timeout)
 };
 
 
-bool NetTcpCancelConnect(HOBJ hConn)
+/*DLLSHARED*/ bool NetTcpCancelConnect(HCONN hConn)
 {
-	return TcpNetCancelConnect(hConn);
+	return Net().Tcp().CancelConnect(hConn);
 };
 
 
-bool NetTcpListen(HOBJ hConn, uint64 NetAddr)
-{	
-	return TcpNetListen(hConn, NetAddrIp(&NetAddr), NetAddrPort(&NetAddr));
-};
-
-
-bool NetTcpListen(HOBJ hConn, uint32 Ip, uint16 Port)
+/*DLLSHARED*/ bool NetTcpListen(HCONN hConn, int32 Backlog, uint64 NetAddr)
 {
-	return TcpNetListen(hConn, Ip, Port);
+	return Net().Tcp().Listen(hConn, Backlog, NetAddrIp(&NetAddr), NetAddrPort(&NetAddr));
 };
 
 
-bool NetTcpListen(HOBJ hConn, const char* Ip, uint16 Port)
+/*DLLSHARED*/ bool NetTcpListen(HCONN hConn, int32 Backlog, uint32 Ip, uint16 Port)
+{
+	return Net().Tcp().Listen(hConn, Backlog, Ip, Port);
+};
+
+
+/*DLLSHARED*/ bool NetTcpListen(HCONN hConn, int32 Backlog, const char* Ip, uint16 Port)
 {
 	uint64 NetAddr = 0;
 	NetAddrInit(&NetAddr, Ip, Port);
 
-	return NetTcpListen(hConn, NetAddrIp(&NetAddr), NetAddrPort(&NetAddr));
+	return NetTcpListen(hConn, Backlog, NetAddrIp(&NetAddr), NetAddrPort(&NetAddr));
 };
 
 
-bool NetTcpListenSelf(HOBJ hConn, uint16 Port)
+/*DLLSHARED*/ bool NetTcpListenSelf(HCONN hConn, int32 Backlog, uint16 Port)
 {
 	uint32 IpAddrArray[4] = { 0 };
 	int32 IpAddrArrayCount = COUNT_OF(IpAddrArray);
-	
+
 	if (NetGetAddrinfoSelf(IpAddrArray, &IpAddrArrayCount))
-		return NetTcpListen(hConn, IpAddrArray[0], Port);
+		return NetTcpListen(hConn, Backlog, IpAddrArray[0], Port);
 	else
 		return false;
 };
 
 
-bool NetTcpListenEnable(HOBJ hConn, bool Flag)
+/*DLLSHARED*/ uint32 NetTcpRecv(HCONN hConn, void* Buff, uint32 BuffSize)
 {
-	return TcpNetListenEnable(hConn, Flag);
+	return Net().Tcp().Read(hConn, Buff, BuffSize);
 };
 
 
-bool NetTcpSend(HOBJ hConn, const char* Data, int32 DataSize, bool FlagDisconnectOnComplete)
+/*DLLSHARED*/ uint32 NetTcpSend(HCONN hConn, const void* Data, uint32 DataSize, bool FlagDisconnectOnComplete)
 {
-	return TcpNetWrite(hConn, Data, DataSize, FlagDisconnectOnComplete);
+	return Net().Tcp().Write(hConn, Data, DataSize, FlagDisconnectOnComplete);
 };
 
 
-bool NetTcpDisconnect(HOBJ hConn)
+/*DLLSHARED*/ bool NetTcpDisconnect(HCONN hConn)
 {
-	return TcpNetDisconnect(hConn);
+	return Net().Tcp().Disconnect(hConn);
 };
 
 
-bool NetGetAddrinfo(const char* Hostname, uint32* IpAddrArray, int32* IpAddrArrayCount)
+/*DLLSHARED*/ bool NetTcpResolve(HCONN hConn, const char* Hostname, uint32 Timeout)
 {
-	return NetDnsResolve(Hostname, IpAddrArray, IpAddrArrayCount);
+	return Net().Tcp().Resolve(hConn, Hostname, Timeout);
 };
 
 
-bool NetGetAddrinfo(const char* Hostname, uint32* Ip)
+/*DLLSHARED*/ bool NetTcpCancelResolve(HCONN hConn)
 {
-	uint32 IpAddrArray[32] = { 0 };	
-	int32 IpAddrArrayCount = COUNT_OF(IpAddrArray);
-
-	if (NetGetAddrinfo(Hostname, IpAddrArray, &IpAddrArrayCount))
-	{
-		*Ip = IpAddrArray[0];
-		return true;
-	};
-
-	return false;
+	return Net().Tcp().CancelResolve(hConn);
 };
 
 
-bool NetGetAddrinfoSelf(uint32* IpAddrArray, int32* IpAddrArrayCount)
+/*DLLSHARED*/ void NetTcpSetForceClose(HCONN hConn, bool Flag)
 {
-	char Hostname[256];
-	Hostname[0] = '\0';
-
-	if (!gethostname(Hostname, sizeof(Hostname)))
-	{
-		if (NetGetAddrinfo(Hostname, IpAddrArray, IpAddrArrayCount))
-			return true;
-	};
-
-	return false;
+	Net().Tcp().SetForceClose(hConn, Flag);
 };
 
+
+/*DLLSHARED*/ void NetTcpSetTimeoutRead(HCONN hConn, uint32 Timeout)
+{
+	Net().Tcp().SetTimeoutRead(hConn, Timeout);
+};
+
+
+/*DLLSHARED*/ void NetTcpSetUserParam(HCONN hConn, void* userparam)
+{
+	Net().Tcp().SetUserParam(hConn, userparam);
+};
+
+
+/*DLLSHARED*/ void* NetTcpGetUserParam(HCONN hConn)
+{
+	return Net().Tcp().GetUserParam(hConn);
+};
+
+
+/*DLLSHARED*/ void NetTcpSetProxy(HCONN hConn, NETPROXY ProxyType, uint64 NetAddr, const NETPROXYPARAM* Parameter)
+{
+	Net().Tcp().SetProxy(hConn, ProxyType, NetAddr, Parameter);
+};
+
+
+/*DLLSHARED*/ void NetTcpClearProxy(HCONN hConn)
+{
+	Net().Tcp().ClearProxy(hConn);
+};
+
+
+/*DLLSHARED*/ void NetTcpSetSecure(HCONN hConn, bool Flag)
+{
+	Net().Tcp().SetSecurity(hConn, Flag);
+};
+
+
+/*DLLSHARED*/ void NetTcpSetSecureHost(HCONN hConn, const char* Hostname)
+{
+	Net().Tcp().SetSecurityHost(hConn, Hostname);
+};
+
+
+/*DLLSHARED*/ bool NetTcpIsRemote(HCONN hConn)
+{
+	return Net().Tcp().IsRemote(hConn);
+};
+
+
+/*DLLSHARED*/ bool NetTcpIsConnected(HCONN hConn)
+{
+	return Net().Tcp().IsConnected(hConn);
+};
+
+
+/*DLLSHARED*/ uint64 NetTcpNetAddr(HCONN hConn)
+{
+	return Net().Tcp().NetAddr(hConn);
+};
+
+
+/*DLLSHARED*/ void NetTcpSetEventProc(HCONN hConn, NETEVENTPROC EventProc, void* Param)
+{
+	Net().Tcp().SetEventProc(hConn, EventProc, Param);
+};
+
+
+/*DLLSHARED*/ void NetTcpGetEventProc(HCONN hConn, NETEVENTPROC* EventProc, void** Param)
+{
+	Net().Tcp().GetEventProc(hConn, EventProc, Param);
+};
+
+
+/*DLLSHARED*/ bool NetGetAddrinfo(const char* Hostname, uint32* IpAddrArray, int32* IpAddrArrayCount)
+{
+	return Net().Tcp().GetAddrinfo(Hostname, IpAddrArray, IpAddrArrayCount);
+};
+
+
+/*DLLSHARED*/ bool NetGetAddrinfo(const char* Hostname, uint32* Ip)
+{
+	return Net().Tcp().GetAddrinfo(Hostname, Ip);
+};
+
+
+/*DLLSHARED*/ bool NetGetAddrinfoSelf(uint32* IpAddrArray, int32* IpAddrArrayCount)
+{
+	return Net().Tcp().GetAddrinfoSelf(IpAddrArray, IpAddrArrayCount);
+};

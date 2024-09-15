@@ -1,7 +1,7 @@
 #pragma once
 
 
-class CTimer
+class CTimer final
 {
 public:
     CTimer(void);

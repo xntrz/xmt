@@ -1,32 +1,37 @@
 #pragma once
 
 #include "HttpStatus.hpp"
+#include "HttpUtils.hpp"
+
+#include "Utils/Misc/Pimpl.hpp"
 
 
 class CHttpResponse final
 {
-private:
-	class Impl;
-
 public:
-	CHttpResponse(void);
-	~CHttpResponse(void);
-	void clear(void);
-	bool process(const char* data, int dataSize);
-	httpstatus::value status(void) const;
-	int header_count(const char* hdr) const;
-	std::string header_value(const char* hdr) const;
-	std::vector<std::string> header_values(const char* hdr) const;
-	std::string cookie_value(const char* cookie) const;
-	char* body(void) const;
-	int body_size(void) const;
-	bool is_complete(void) const;
-	bool is_keepalive(void) const;
+	CHttpResponse();
+	~CHttpResponse();
+	
+	void clear();
+	bool process(const void* data, std::size_t size);
+	
+	httpstatus::value status() const;
+	int header_count(const std::string& hdr) const;
+	std::string header_value(const std::string& hdr) const;
+	std::vector<std::string> header_values(const std::string& hdr) const;
+	const char* body() const;
+	std::size_t body_size() const;
+	bool is_complete() const;
+	bool is_keepalive() const;
 
 private:
-	Impl& impl(void);
-	const Impl& impl(void) const;
-
-private:
-	Impl* m_pImpl;
+	class impl;
+#ifdef _DEBUG
+	static const std::size_t impl_size = 248;
+	static const std::size_t impl_align = 8;
+#else
+	static const std::size_t impl_size = 224;
+	static const std::size_t impl_align = 8;
+#endif
+	pimpl<impl, impl_size, impl_align> m_pimpl;
 };

@@ -2,6 +2,8 @@
 
 #include "gumbo/gumbo.h"
 
+#include "Shared/Common/Mem.hpp"
+
 
 #ifdef _DEBUG
 #define HTMLOBJ_EXCEPTION(Msg) CHtmlObj::exception(__FUNCTION__, Msg)
@@ -10,10 +12,11 @@
 #endif
 
 
-static void* HtmlAlloc(void* Param, uint32 Size)
+static void* HtmlAlloc(void* Param, size_t Size)
 {
 #ifdef _DEBUG	
-    return MemAlloc(Size, __FILE__, __LINE__);
+    MemSetAllocSource(__FILE__, __LINE__);
+    return MemAlloc(Size);
 #else
     return MemAlloc(Size);
 #endif
@@ -22,11 +25,7 @@ static void* HtmlAlloc(void* Param, uint32 Size)
 
 static void HtmlFree(void* Param, void* Ptr)
 {
-#ifdef _DEBUG	
-    MemFree(Ptr, __FILE__, __LINE__);
-#else
     MemFree(Ptr);
-#endif
 };
 
 
@@ -231,7 +230,7 @@ bool CHtmlObj::has_attribute(const std::string& AttributeName)
     }
     catch (exception& e)
     {
-		REF(e);
+		(void)e;
     };
 
     return bResult;
@@ -250,7 +249,7 @@ bool CHtmlObj::has_attribute_value(const std::string& AttributeName, const std::
     }
     catch (exception& e)
     {
-		REF(e);
+		(void)e;
     };
 
     return bResult;

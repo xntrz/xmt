@@ -1,9 +1,7 @@
 #pragma once
 
-#include "Utils/Proxy/ProxyResult.hpp"
 
-
-class CTvlResult final : public CProxyResult
+class CTvlResult final
 {
 public:
     enum ERRTYPE
@@ -19,24 +17,26 @@ public:
     };
 
 public:
-    static CTvlResult& Instance(void);
+    CTvlResult();
+    void OnAttach();
+    void OnDetach();
+    void OnStart();
+    void OnStop();
 
-    virtual void Start(void) override;
-    virtual void Stop(void) override;
-    void AddViewerCountWork(int32 nViewerCount);
-    int32 GetViewerCountWork(void);
-    void SetViewerCountReal(int32 nViewerCount);
-    int32 GetViewerCountReal(void);
-    void SetError(ERRTYPE ErrorType);
-    ERRTYPE GetError(void);
-    void SetCtxObjWalkTime(uint32 WalkTimeMS);
-    uint32 GetCtxObjWalkTime(void) const;
+    inline void SetError(ERRTYPE errtype) { m_errtype = errtype; };
+    inline ERRTYPE GetError() const { return m_errtype; };
+
+    inline void AddViewerCount(int32 count) { m_nViewerCount += count; };
+    inline int32 GetViewerCount() const { return m_nViewerCount; };
+
+    inline void SetViewerCountReal(int32 count) { m_nViewerCountReal = count; };
+    inline int32 GetViewerCountReal() const { return m_nViewerCountReal; };
 
 private:
-    std::atomic<int32> m_nViewerCountWork;
+    std::atomic<int32> m_nViewerCount;
     std::atomic<int32> m_nViewerCountReal;
-    std::atomic<ERRTYPE> m_Errtype;
-    uint32 m_aWalkTimestamps[8];
-    int32 m_nWalkTimestampsNum;
-    uint32 m_uWalktime;
+    std::atomic<ERRTYPE> m_errtype;
 };
+
+
+extern CTvlResult TvlResult;

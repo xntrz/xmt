@@ -1,8 +1,8 @@
 #pragma once
 
 
-DLLSHARED void RndInitialize(void);
-DLLSHARED void RndTerminate(void);
+void RndInitialize(void);
+void RndTerminate(void);
 DLLSHARED int32 RndInt32(void);
 DLLSHARED int32 RndInt32(int32 Begin, int32 End);
 DLLSHARED uint32 RndUInt32(void);

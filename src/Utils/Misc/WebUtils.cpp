@@ -3,6 +3,29 @@
 #include "Shared/Common/Random.hpp"
 
 
+static inline bool _webUrlGetPathStartEndPos(const std::string& Url, size_t& posBegin, size_t& posEnd)
+{
+	size_t p0 = Url.find("://");
+	if (p0 != std::string::npos)
+		p0 += (sizeof("://") - 1);
+	else
+		p0 = 0;
+
+	size_t p1 = Url.find_first_of('/', p0);
+	if (p1 != std::string::npos)
+	{
+		size_t p2 = Url.find_first_of('?', ++p1);
+
+		posBegin = p1;
+		posEnd = p2;
+
+		return true;
+	};
+
+	return false;
+};
+
+
 void WebRemoveCharMask(std::string& String, const char* CharMask)
 {
 	for (uint32 i = 0; i < std::strlen(CharMask); i++)
@@ -21,10 +44,11 @@ std::string WebRndHexString(int32 Len, bool FlagUpper)
 
 	static char HexLC[] = "0123456789abcdef";
 	static char HexUC[] = "0123456789ABCDEF";
-	const char* Hex = (FlagUpper ? HexUC : HexLC);
-	
+	const char* Hex 	= (FlagUpper ? HexUC : HexLC);
+	int32 		HexLen 	= (FlagUpper ? COUNT_OF(HexUC) : COUNT_OF(HexLC));
+
 	for (int32 i = 0; i < Len; ++i)
-		Result.push_back( Hex[RndInt32(0, (sizeof(Hex) - 1))] );
+		Result.push_back( Hex[RndInt32(0, HexLen - 1)] );
 
 	return Result;
 };
@@ -111,21 +135,13 @@ std::string WebUrlExtractPort(const std::string& Url)
 
 std::string WebUrlExtractPath(const std::string& Url)
 {
-	auto p0 = Url.find("://");
-	if (p0 != std::string::npos)
-		p0 += 3;
-	else
-		p0 = 0;
+	size_t posBegin = 0;
+	size_t posEnd = 0;	
 
-	auto p1 = Url.find_first_of('/', p0);
-	if (p1 != std::string::npos)
-	{
-		++p1;
-		auto p2 = Url.find_first_of('?', p1);
-		return Url.substr(p1, (p2 != std::string::npos ? (p2 - p1) : p2));
-	};
+	if (_webUrlGetPathStartEndPos(Url, posBegin, posEnd))
+		return Url.substr(posBegin, (posEnd != std::string::npos ? (posEnd - posBegin) : posEnd));
 
-	return{};
+	return {};
 };
 
 
@@ -236,4 +252,79 @@ void WebStrRep(std::string& Src, const std::string& What, const std::string& To)
 		Src.erase(i, What.length());
 		Src.insert(i, To);
 	};
+};
+
+
+bool WebIsSecurePort(uint16 port)
+{
+	switch (port)
+	{
+	case 443:
+		return true;
+
+	default:
+		return false;
+	};
+};
+
+
+uint32 WebUrlGetPathLevelCount(const std::string& Url)
+{
+	/**
+	 *	For example path with "dir/sub/folder" will return level of 3
+	 */
+
+	size_t posBegin = 0;
+	size_t posEnd = 0;
+
+	if (!_webUrlGetPathStartEndPos(Url, posBegin, posEnd))
+		return 0;
+	
+	uint32 levels = 0;
+	size_t offset = posBegin;
+	while (true)
+	{
+		++levels;
+
+		offset = Url.find_first_of('/', offset);
+		if (offset == std::string::npos)
+			break;
+
+		++offset;
+	};
+
+	return levels;
+};
+
+
+std::string WebUrlGetPathAtLevel(const std::string& Url, uint32 lvl)
+{
+	size_t posBegin = 0;
+	size_t posEnd = 0;
+
+	if (!_webUrlGetPathStartEndPos(Url, posBegin, posEnd))
+		return 0;
+
+	uint32 lvlCnt = WebUrlGetPathLevelCount(Url);
+	ASSERT(lvl < lvlCnt);
+
+	uint32 lvlCur = 0;
+	size_t offset = posBegin;
+	while (true)
+	{
+		size_t pbeg = offset;
+		offset = Url.find_first_of('/', offset);
+		size_t pend = offset;
+
+		if (lvlCur == lvl)
+			return Url.substr(pbeg, pend - pbeg);
+
+		if (offset == std::string::npos)
+			break;
+
+		++offset;
+		++lvlCur;
+	};
+
+	return {};
 };

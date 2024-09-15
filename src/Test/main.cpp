@@ -1,67 +1,49 @@
+#include "TestRc.hpp"
+#include "TestHttp.hpp"
+#include "TestWebsocket.hpp"
+#include "TestJson.hpp"
+#include "TestNet.hpp"
+#include "TestAsyncService.hpp"
+#include "TestUI.hpp"
+#include "TestUserAgent.hpp"
+
+#include "Utils/init.hpp"
+#include "Utils/Misc/WebUtils.hpp"
+
+#include "Shared/Common/UserAgent.hpp"
+#include "Shared/UI/nk_text.hpp"
 
 
-static void TestInitialize(HINSTANCE hInstance);
-static void TestTerminate(void);
-static void TestAttach(void);
-static void TestDetach(void);
-static void TestLock(void);
-static void TestUnlock(void);
-static HWND TestRequestDlg(HWND hWndParent, int32 Type);
-
-
-static const ModuleDesc_t TestModuleDesc =
+extern "C" DLLEXPORT void ModuleEvtProc(MODULE_EVT& evt)
 {
-    "Test",
-    TestInitialize,
-    TestTerminate,
-    TestAttach,
-    TestDetach,
-    TestLock,
-    TestUnlock,
-    TestRequestDlg,
-};
+	switch (evt.id)
+	{
+	case MODULE_EVT_STARTUP:
+		nk_text_load_mod_rc("test_en", evt.param.startup.hInstance, IDF_TEXT_EN);
+		UtilsInitialize();
+		TestUserAgent = UserAgentGenereate();
+		break;
 
+	case MODULE_EVT_SHUTDOWN:
+		TestUserAgent.clear();
+		UtilsTerminate();
+		break;
 
-INIT_MODULE(TestModuleDesc);
+	case MODULE_EVT_ATTACH:
+	case MODULE_EVT_DETACH:
+		break;
 
+	case MODULE_EVT_INFO:
+		nk_text_path_locale_push("test");
+		evt.param.info.title 		= nk_text_id(1);
+		evt.param.info.description 	= nk_text_id(1);
+		nk_text_path_pop();
+		evt.param.info.icoid 	= -1;
+		evt.param.info.ui_proc 	= &TestUI;
+		evt.param.info.tag 		= "Test";
+		break;
 
-static void TestInitialize(HINSTANCE hInstance)
-{
-
-};
-
-
-static void TestTerminate(void)
-{
-    ;
-};
-
-
-static void TestAttach(void)
-{
-    ;
-};
-
-
-static void TestDetach(void)
-{
-    ;
-};
-
-
-static void TestLock(void)
-{
-    ;
-};
-
-
-static void TestUnlock(void)
-{
-    ;
-};
-
-
-static HWND TestRequestDlg(HWND hWndParent, int32 Type)
-{
-    return NULL;
+	default:
+		break;
+	};
 };

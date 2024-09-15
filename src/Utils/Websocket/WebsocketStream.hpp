@@ -24,10 +24,20 @@ public:
 	static const int RESULT_FATAL	= -1;
 	static const int RESULT_OK		= 0;
 
-	struct MESSAGE
-	{
-		int m_opcode;
-		std::vector<unsigned char> m_data;
+	struct message {
+		int opcode;
+		std::vector<unsigned char> data;
+
+		inline message()
+			: opcode(-1), data() {}
+
+		inline message(int _opcode, const std::vector<unsigned char>& _data)
+			: opcode(_opcode), data(std::move(_data)) {};
+		
+		inline message(message& m) {
+			opcode = m.opcode;
+			data = std::move(m.data);
+		};
 	};
 
 public:
@@ -54,12 +64,12 @@ public:
 	//
 	//	On success returns TRUE and fills "msg" with data
 	//
-	bool read_message(MESSAGE& msg);
+	bool read_message(message& msg);
 
 private:
 	bool m_bBegin;
 	unsigned m_features;
 	std::vector<unsigned char> m_payload;
-	std::deque<MESSAGE> m_queueMessages;
+	std::deque<message> m_queueMessages;
 	CCompressor* m_pCompressor;
 };

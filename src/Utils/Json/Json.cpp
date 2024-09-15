@@ -2,16 +2,19 @@
 
 #include "cjson/cJSON.h"
 
+#include "Shared/Common/Mem.hpp"
+
 
 static const char* JSON_TRUE	= "true";
 static const char* JSON_FALSE	= "false";
 static const char* JSON_NULL	= "null";
 
 
-static void* cjson_malloc(uint32 size)
+static void* cjson_malloc(size_t size)
 {
-#ifdef _DEBUG	
-	return MemAlloc(size, __FILE__, __LINE__);
+#ifdef _DEBUG
+	MemSetAllocSource(__FILE__, __LINE__);
+	return MemAlloc(size);
 #else
 	return MemAlloc(size);
 #endif
@@ -20,11 +23,7 @@ static void* cjson_malloc(uint32 size)
 
 static void cjson_free(void* mem)
 {
-#ifdef _DEBUG	
-	MemFree(mem, __FILE__, __LINE__);
-#else
 	MemFree(mem);
-#endif
 };
 
 
@@ -135,4 +134,10 @@ bool CJson::is_array(void) const
 int CJson::array_size(void) const
 {
 	return cJSON_GetArraySize((cJSON*)m_opaque);
+};
+
+
+CJson::operator bool() const
+{
+	return (cJSON_IsNull((cJSON*)m_opaque) == 0);
 };

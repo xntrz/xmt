@@ -1,22 +1,16 @@
 #pragma once
 
-enum NetEvent_t
+enum NETEVENT
 {
-    NetEvent_Connect = 0,
-    NetEvent_ConnectFail,
-    NetEvent_ConnectFailProxy,
-    NetEvent_ConnectFailSsl,
-    NetEvent_Recv,
-    NetEvent_Disconnect,
-    NetEvent_ResolveAddr,
+    NETEVENT_CONNECT = 0,
+    NETEVENT_CONNECTFAIL,
+    NETEVENT_CONNECTFAILPRX,
+    NETEVENT_CONNECTFAILSSL,
+    NETEVENT_RECV,
+    NETEVENT_SEND,
+    NETEVENT_DISCONNECT,
+    NETEVENT_RESOLVE,
 };
 
-typedef bool(*NetEventProc_t)(
-    HOBJ        hConn,
-    NetEvent_t  Event,
-    uint32      ErrorCode,
-    uint64      NetAddr,
-    const char* Data,
-    uint32      DataSize,
-    void*       Param
-);
+using HCONN = void*;
+using NETEVENTPROC = std::function<bool(HCONN hConn, NETEVENT Event, uint32 Error, uint64 NetAddr, const void* Data, uint32 DataSize, void* Param)>;

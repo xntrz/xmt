@@ -2,8 +2,7 @@
 
 
 void TvluInitialize(void);
-void TvluPreTerminate(void);
-void TvluPostTerminate(void);
+void TvluTerminate(void);
 bool TvluIsChannelExist(const char* ChannelName);
 bool TvluIsChannelLive(const char* ChannelName);
 int32 TvluGetChannelViewersCount(const char* ChannelName);

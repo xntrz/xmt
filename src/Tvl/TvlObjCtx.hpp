@@ -3,58 +3,56 @@
 #include "Shared/Network/Net.hpp"
 
 #include "Utils/Proxy/ProxyObj.hpp"
+#include "Utils/Proxy/ProxySeq.hpp"
+#include "Utils/Misc/Timer.hpp"
 #include "Utils/Misc/DataStore.hpp"
 #include "Utils/Http/HttpReq.hpp"
 #include "Utils/Websocket/Websocket.hpp"
-#include "Utils/Misc/Timer.hpp"
 
 
-class CTvlObjCtxShared;
-
-
-class CTvlStateBase : public IProxyObjState
+struct CTvlStateShared
 {
-public:
-    virtual void Attach(void* Param) override {};
-    virtual void Detach(void) override {};
-    virtual void Observing(void) override;
-	void SetAsyncStatus(int32 iAsyncStatus);
-	int32 GetAsyncStatus(void);
-    CTvlObjCtxShared& Shared(void);
-    CHttpReq& Req(void);
-    CDataStore& Ds(void);
-    CWebsocket& Ws(void);
+    CDataStore datastore;
+    CWebsocket websocket;
+    CHttpReq request;
 };
 
 
-class CTvlStateWatch final : public CTvlStateBase
+class CTvlStateBase : public CProxyObj::CState
 {
 public:
-    virtual void Attach(void* Param) override;
+    virtual void Attach() override {};
+    virtual void Detach() override {};
+    virtual void Observing() override {};
+
+    inline CTvlStateShared& shared() { return *reinterpret_cast<CTvlStateShared*>(Subject().GetShared()); };
+    inline CHttpReq& request() { return shared().request; };
+    inline CDataStore& datastore() { return shared().datastore; };
+    inline CWebsocket& websocket() { return shared().websocket; };
 };
 
 
 class CTvlStateWsTicket final : public CTvlStateBase
 {
 public:
-    virtual void Attach(void* Param) override;
+    virtual void Attach() override;
 };
 
 
 class CTvlStateWsToken final : public CTvlStateBase
 {
 public:
-    virtual void Attach(void* Param) override;
+    virtual void Attach() override;
 };
 
 
 class CTvlStateWs final : public CTvlStateBase
 {
 public:
-    virtual void Attach(void* Param) override;
-    virtual void Detach(void) override;
-    virtual void Observing(void) override;
-    void SendPing(void);
+    virtual void Attach() override;
+    virtual void Detach() override;
+    virtual void Observing() override;
+    void SendPing();
 
 private:
     CTimer m_PingTimer;
@@ -62,46 +60,23 @@ private:
 };
 
 
-class CTvlObjCtxShared
-{
-public:
-    std::atomic<int32> m_iAsyncStatus;
-    CDataStore m_DataStore;
-    CWebsocket m_ws;
-    CHttpReq m_req;
-};
-
-
-class CTvlObjCtxTag
-{
-public:
-    ;
-};
-
-
-class CTvlObjCtx final :
-    public CProxyObj,
-    public CListNode<CTvlObjCtx, CTvlObjCtxTag>
+class CTvlObjCtx final : public CProxyObj
 {
 public:
     static int32 TargetChannelId;
 
-    CTvlObjCtx(void);
-    virtual ~CTvlObjCtx(void);
-    virtual void Start(void) override;
-    virtual void Stop(void) override;
+    inline CTvlObjCtx() {};
+    inline virtual ~CTvlObjCtx() {};
+
+    virtual void Start() override;
+    virtual void Stop() override;
     virtual void Service(uint32 uServiceFlags) override;
-    
+    void SetInitialDatastore();
+
 private:
-    CTvlStateWatch m_StateWatch;
-    CTvlStateWsTicket m_StateWsTicket;
-    CTvlStateWsToken m_StateWsToken;
-    CTvlStateWs m_StateWs;
-    CTvlObjCtxShared m_Shared;
-    int32 m_nStateSequenceCur;
-    int32 m_nStateSequenceHead;
-    int32 m_nStateSequenceTail;
-    int32 m_nStateSequenceSave;
-    bool m_bInitFlag;
-    bool m_bBotFlag;
+    CTvlStateWsTicket m_stateWsTicket;
+    CTvlStateWsToken m_stateWsToken;
+    CTvlStateWs m_stateWs;
+    CTvlStateShared m_shared;
+    CProxyObjSeq m_seq; 
 };

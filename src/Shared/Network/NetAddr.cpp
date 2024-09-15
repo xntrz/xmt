@@ -1,150 +1,206 @@
 #include "NetAddr.hpp"
-#include "NetTypedefs.hpp"
+
+#include "Tcp/TcpTypedefs.hpp"
 
 
-enum NetAddrFlag_t : uint16
+class CNetAddr
 {
-    NetAddrFlag_Invalid = BIT(0),
-    NetAddrFlag_OrderNet = BIT(1),
-    NetAddrFlag_OrderHost = BIT(2),
+public:
+    CNetAddr(void);
+    CNetAddr(uint64* NetAddr);
+    CNetAddr(uint64 Value);
+    CNetAddr(uint32 Ip, uint16 Port);
+    CNetAddr(uint32 Ip, uint16 Port, uint16 Flags);
+    CNetAddr& Ip(uint32 Ip);
+    CNetAddr& Port(uint16 Port);
+    uint32 Ip(void) const;
+    uint16 Port(void) const;
+    uint64 Value(void) const;
+    operator uint64(void) const;
+    CNetAddr& hton(void);
+    CNetAddr& ntoh(void);
+    bool validate(void) const;
+
+private:
+    union
+    {
+        uint64 m_Value;
+        struct
+        {
+            union
+            {
+                uint8 m_IpBytes[4];
+                uint32 m_Ip;
+            };        
+            uint16 m_Port;
+        };        
+    };
 };
 
 
-union NetAddr_t
-{
-    uint64 Value;
-    struct
-    {
-        uint32 Ip;
-        uint16 Port;
-        uint16 Flags;
-    } Parts;
+static_assert(sizeof(CNetAddr) == sizeof(uint64), "check me");
 
-    inline NetAddr_t(uint64 AddrValue)
-    : Value(AddrValue)
-    {
-        ;
-    };
+
+CNetAddr::CNetAddr(void)
+: m_Ip(uint32_max)
+, m_Port(uint16_max)
+{
+    ;
+};
+
+
+CNetAddr::CNetAddr(uint64 Value)
+: m_Value(Value)
+{
+    ;
+};
+
+
+CNetAddr::CNetAddr(uint32 Ip, uint16 Port)
+: m_Ip(Ip)
+, m_Port(Port)
+{
+    ;
+};
+
+
+CNetAddr::CNetAddr(uint32 Ip, uint16 Port, uint16 Flags)
+: m_Ip(Ip)
+, m_Port(Port)
+{
+    ;
+};
+
+
+CNetAddr& CNetAddr::Ip(uint32 Ip)
+{
+    m_Ip = Ip;
+    return *this;
+};
+
+
+CNetAddr& CNetAddr::Port(uint16 Port)
+{
+    m_Port = Port;
+    return *this;
+};
+
+
+uint32 CNetAddr::Ip(void) const
+{
+    return m_Ip;
+};
+
+
+uint16 CNetAddr::Port(void) const
+{
+    return m_Port;
+};
+
+
+uint64 CNetAddr::Value(void) const
+{
+    return m_Value;
+};
+
+
+CNetAddr::operator uint64(void) const
+{
+    return Value();
+};
+
+
+CNetAddr& CNetAddr::hton(void)
+{
+    m_Ip = htonl(m_Ip);
+    m_Port = htons(m_Port);
+
+    return *this;
+};
+
+
+CNetAddr& CNetAddr::ntoh(void)
+{
+    m_Ip = ntohl(m_Ip);
+    m_Port = ntohs(m_Port);
+
+    return *this;
+};
+
+
+bool CNetAddr::validate(void) const
+{
+    in_addr InAddr = { 0 };
+    InAddr.S_un.S_un_b.s_b1 = m_IpBytes[0];
+    InAddr.S_un.S_un_b.s_b2 = m_IpBytes[1];
+    InAddr.S_un.S_un_b.s_b3 = m_IpBytes[2];
+    InAddr.S_un.S_un_b.s_b4 = m_IpBytes[3];
     
-    inline NetAddr_t(uint32 Ip, uint16 Port)
-    : Parts({ Ip, Port, 0 })
-    {
-        ;
-    };
-
-    inline NetAddr_t(uint32 Ip, uint16 Port, uint16 Flags)
-    : Parts({Ip, Port, Flags})
-    {
-        ;
-    };
-
-    inline operator uint64(void)
-    {
-        return Value;
-    };
+    return (inet_ntoa(InAddr) != nullptr);
 };
 
 
-static_assert(sizeof(NetAddr_t) == sizeof(uint64), "check me");
-
-
-static uint64 NetAddrInvalid = NetAddr_t(uint32_max, uint16_max, NetAddrFlag_Invalid);
-
-
-void NetAddrInit(uint64* NetAddr)
+/*DLLSHARED*/ void NetAddrInit(uint64* NetAddr)
 {
-    *NetAddr = NetAddrInvalid;
+    *NetAddr = 0;
 };
 
 
-void NetAddrInit(uint64* NetAddr, const char* Ip, uint16 Port)
+/*DLLSHARED*/ void NetAddrInit(uint64* NetAddr, const char* Ip, uint16 Port)
 {
-    *NetAddr = NetAddr_t(ntohl(inet_addr(Ip)), Port);
+    *NetAddr = CNetAddr(ntohl(inet_addr(Ip)), Port);
 };
 
 
-void NetAddrInit(uint64* NetAddr, uint32 Ip, uint16 Port)
+/*DLLSHARED*/ void NetAddrInit(uint64* NetAddr, uint32 Ip, uint16 Port)
 {
-    *NetAddr = NetAddr_t(Ip, Port);
+    *NetAddr = CNetAddr(Ip, Port);
 };
 
 
-bool NetAddrIsValid(uint64* NetAddr)
+/*DLLSHARED*/ bool NetAddrIsValid(uint64* NetAddr)
 {
-    NetAddr_t Addr(*NetAddr);
-    return !IS_FLAG_SET(Addr.Parts.Flags, NetAddrFlag_Invalid);
+    return CNetAddr(*NetAddr).validate();
 };
 
 
-bool NetAddrIsInNetOrder(uint64* NetAddr)
+/*DLLSHARED*/ void NetAddrIp(uint64* NetAddr, uint32 Ip)
 {
-    NetAddr_t Addr(*NetAddr);
-    return IS_FLAG_SET(Addr.Parts.Flags, NetAddrFlag_OrderNet);
+    *NetAddr = CNetAddr(*NetAddr).Ip(Ip);
 };
 
 
-bool NetAddrIsInHostOrder(uint64* NetAddr)
+/*DLLSHARED*/ uint32 NetAddrIp(uint64* NetAddr)
 {
-    NetAddr_t Addr(*NetAddr);
-    return IS_FLAG_SET(Addr.Parts.Flags, NetAddrFlag_OrderHost);
+    return CNetAddr(*NetAddr).Ip();
 };
 
 
-void NetAddrIp(uint64* NetAddr, uint32 Ip)
+/*DLLSHARED*/ void NetAddrPort(uint64* NetAddr, uint16 Port)
 {
-    NetAddr_t Addr(*NetAddr);
-    Addr.Parts.Ip = Ip;
-    FLAG_CLEAR(Addr.Parts.Flags, NetAddrFlag_Invalid);
-    *NetAddr = Addr;
+    *NetAddr = CNetAddr(*NetAddr).Port(Port);
 };
 
 
-uint32 NetAddrIp(uint64* NetAddr)
+/*DLLSHARED*/ uint16 NetAddrPort(uint64* NetAddr)
 {
-    NetAddr_t Addr(*NetAddr);
-    return Addr.Parts.Ip;
+    return CNetAddr(*NetAddr).Port();
 };
 
 
-void NetAddrPort(uint64* NetAddr, uint16 Port)
+/*DLLSHARED*/ void NetAddrHton(uint64* NetAddr)
 {
-    NetAddr_t Addr(*NetAddr);
-    Addr.Parts.Port = Port;
-    FLAG_CLEAR(Addr.Parts.Flags, NetAddrFlag_Invalid);
-    *NetAddr = Addr;
+    *NetAddr = CNetAddr(*NetAddr).hton();
 };
 
 
-uint16 NetAddrPort(uint64* NetAddr)
+/*DLLSHARED*/ void NetAddrNtoh(uint64* NetAddr)
 {
-    NetAddr_t Addr(*NetAddr);
-    return Addr.Parts.Port;
+    *NetAddr = CNetAddr(*NetAddr).ntoh();    
 };
 
 
-void NetAddrHton(uint64* NetAddr)
-{
-    NetAddr_t Addr(*NetAddr);
-    Addr.Parts.Ip = htonl(Addr.Parts.Ip);
-    Addr.Parts.Port = htons(Addr.Parts.Port);
-    FLAG_CLEAR(Addr.Parts.Flags, NetAddrFlag_OrderHost);
-    FLAG_SET(Addr.Parts.Flags, NetAddrFlag_OrderNet);
-    *NetAddr = Addr;
-};
-
-
-void NetAddrNtoh(uint64* NetAddr)
-{
-    NetAddr_t Addr(*NetAddr);
-    Addr.Parts.Ip = ntohl(Addr.Parts.Ip);
-    Addr.Parts.Port = ntohs(Addr.Parts.Port);
-    FLAG_CLEAR(Addr.Parts.Flags, NetAddrFlag_OrderNet);
-    FLAG_SET(Addr.Parts.Flags, NetAddrFlag_OrderHost);
-    *NetAddr = Addr;
-};
-
-
-void NetAddrToString(uint64* NetAddr, char* Buffer, int32 BufferSize, char IpPortDelimiter)
+/*DLLSHARED*/ void NetAddrToString(uint64* NetAddr, char* Buffer, int32 BufferSize, char IpPortDelimiter)
 {
     char IpAddress[32];
     IpAddress[0] = '\0';
@@ -155,64 +211,57 @@ void NetAddrToString(uint64* NetAddr, char* Buffer, int32 BufferSize, char IpPor
     NetAddrToStringIp(NetAddr, IpAddress, sizeof(IpAddress));
     NetAddrToStringPort(NetAddr, Port, sizeof(Port));
 
-    sprintf_s(Buffer, BufferSize, "%s%c%s", IpAddress, IpPortDelimiter, Port);
+    std::sprintf(Buffer, "%s%c%s", IpAddress, IpPortDelimiter, Port);
 };
 
 
-void NetAddrToStringIp(uint64* NetAddr, char* Buffer, int32 BufferSize)
+/*DLLSHARED*/ void NetAddrToStringIp(uint64* NetAddr, char* Buffer, int32 BufferSize)
 {
     in_addr InAddr = {};
-    if (NetAddrIsInNetOrder(NetAddr))
-        InAddr.S_un.S_addr = NetAddr_t(*NetAddr).Parts.Ip;
+    InAddr.s_addr = CNetAddr(*NetAddr).Ip();
+
+    const char* IpAddressAsStr = inet_ntoa(InAddr);
+    ASSERT(IpAddressAsStr);
+    if (IpAddressAsStr)
+        std::sprintf(Buffer, "%s", IpAddressAsStr);
+};
+
+
+/*DLLSHARED*/ void NetAddrToStringPort(uint64* NetAddr, char* Buffer, int32 BufferSize)
+{
+    std::sprintf(Buffer, "%" PRIu16, CNetAddr(*NetAddr).Port());
+};
+
+
+/*DLLSHARED*/ std::string NetAddrToStdString(uint64* NetAddr, char IpPortDelimiter)
+{
+    return std::string(NetAddrToStdStringIp(NetAddr) + IpPortDelimiter + NetAddrToStdStringPort(NetAddr));
+};
+
+
+/*DLLSHARED*/ std::string NetAddrToStdStringIp(uint64* NetAddr)
+{
+    in_addr InAddr = {};
+    InAddr.s_addr = CNetAddr(*NetAddr).Ip();
+    InAddr.s_addr = byteswap4(InAddr.s_addr);// ntohl(InAddr.s_addr);
+
+    const char* IpAddressAsStr = inet_ntoa(InAddr);    
+    ASSERT(IpAddressAsStr);
+    if (IpAddressAsStr)
+        return std::string(IpAddressAsStr);
     else
-        InAddr.S_un.S_addr = htonl(NetAddr_t(*NetAddr).Parts.Ip);
-
-    const char* IpAddressAsStr = inet_ntoa(InAddr);
-    ASSERT(IpAddressAsStr);
-
-    sprintf_s(Buffer, BufferSize, "%s", IpAddressAsStr);
+        return {};
 };
 
 
-void NetAddrToStringPort(uint64* NetAddr, char* Buffer, int32 BufferSize)
+/*DLLSHARED*/ std::string NetAddrToStdStringPort(uint64* NetAddr)
 {
-    sprintf_s(Buffer, BufferSize, "%hu", NetAddr_t(*NetAddr).Parts.Port);
+    return std::to_string(CNetAddr(*NetAddr).Port());
 };
 
 
-std::string NetAddrToStdString(uint64* NetAddr, char IpPortDelimiter)
-{
-    return std::string(
-        NetAddrToStdStringIp(NetAddr) + IpPortDelimiter + NetAddrToStdStringPort(NetAddr)
-    );
-};
-
-
-std::string NetAddrToStdStringIp(uint64* NetAddr)
+/*DLLSHARED*/ bool NetAddrIsValidIp(const char* IpAddress)
 {
     in_addr InAddr = {};
-    if (NetAddrIsInNetOrder(NetAddr))
-        InAddr.S_un.S_addr = NetAddr_t(*NetAddr).Parts.Ip;
-    else        
-        InAddr.S_un.S_addr = htonl(NetAddr_t(*NetAddr).Parts.Ip);
-
-    const char* IpAddressAsStr = inet_ntoa(InAddr);
-    ASSERT(IpAddressAsStr);
-
-    return std::string(IpAddressAsStr);
-};
-
-
-std::string NetAddrToStdStringPort(uint64* NetAddr)
-{
-    return std::string(
-        std::to_string(NetAddr_t(*NetAddr).Parts.Port)
-    );
-};
-
-
-bool NetAddrIsValidIp(const char* IpAddress)
-{
-    IN_ADDR InAddr = {};
     return (inet_pton(AF_INET, IpAddress, &InAddr) == 1);
 };

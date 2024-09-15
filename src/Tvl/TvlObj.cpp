@@ -6,21 +6,28 @@
 
 #include "Shared/Common/Time.hpp"
 
-#include "Utils/Http/HttpReq.hpp"
-#include "Utils/Misc/AsyncSvc.hpp"
 #include "Utils/Proxy/ProxyObj.hpp"
 #include "Utils/Misc/Timer.hpp"
 
 
 namespace TVLOBJ
 {
-    const uint32 SYSTEM_PERIOD_INTERVAL = (1000u / 60u);
-    const uint32 VW_UPD_INTERVAL = 5000;
-    
-    enum SVCFLAG
-    {
-        SVCFLAG_RUN = BIT(0),
-    };
+	const std::chrono::milliseconds SYSTEM_UPDATE_INTERVAL(20);
+	const std::chrono::milliseconds VIEWER_UPDATE_INTERVAL(3000);
+};
+
+
+class CTvlViewerUpdateSvc final
+{
+public:
+    CTvlViewerUpdateSvc(std::chrono::milliseconds updateInterval);
+    ~CTvlViewerUpdateSvc();
+
+private:
+    std::thread m_thread;
+    CEvent m_eventStop;
+	std::chrono::milliseconds m_updateInterval;
+	int32 m_viewerCount;
 };
 
 
@@ -38,39 +45,54 @@ private:
     };
 
 public:
-    CTvlObjSystem(int32 nWorkpoolSize, uint32 UpdateTime, int32 nCtxWorkpoolSize);
+    CTvlObjSystem(uint32 workpoolSize, std::chrono::milliseconds updateInterval);
     virtual void OnRun(void) override;
-    virtual bool IsEol(void) const override;
-    void CtrlWorkpoolSize(void);
+    virtual bool IsStopped(void) const override;
     void BranchState(bool bStateResult = true);
 
 private:
+    CTvlViewerUpdateSvc m_viewerUpdateSvc;
     STATE m_eState;
-    int32 m_nCtxWorkpoolSize;
-    CTimer m_WalkTimer;
 };
 
 
-class CTvlVwUpdSvc final : public CAsyncSvc
+CTvlViewerUpdateSvc::CTvlViewerUpdateSvc(std::chrono::milliseconds updateInterval)
+: m_thread()
+, m_eventStop()
+, m_updateInterval(updateInterval)
+, m_viewerCount(0)
 {
-public:
-    CTvlVwUpdSvc(void);
-    virtual void OnRun(void) override;
+    m_thread = thread::spawn("TvlViewerUpdateSvc", [ this ]() {
+        while (!m_eventStop.wait_for(m_updateInterval))
+        {
+            static int32(*TvlGetViewerCountFuncs[])(const char*) =
+            {
+				&TvluGetChannelViewersCount,
+				&TvluGetClipViewsCount,
+				&TvluGetVodViewsCount,
+			};
 
-private:
-    int32 m_VwCntPrev;
+			int32 viewerCount = TvlGetViewerCountFuncs[0](TvlSettings.TargetId);
+			if (viewerCount != -1)
+				m_viewerCount = viewerCount;
+			
+			TvlResult.SetViewerCountReal(m_viewerCount);
+        };
+    });
 };
 
 
-static CTvlObjSystem* TvlObjSystem = nullptr;
-static CTvlVwUpdSvc* TvlVwUpdSvc = nullptr;
+CTvlViewerUpdateSvc::~CTvlViewerUpdateSvc()
+{
+    m_eventStop.signal_once();
+    m_thread.join();
+};
 
 
-CTvlObjSystem::CTvlObjSystem(int32 nWorkpoolSize, uint32 UpdateTime, int32 nCtxWorkpoolSize)
-: CProxyObjSystem(nWorkpoolSize, UpdateTime)
+CTvlObjSystem::CTvlObjSystem(uint32 workpoolSize, std::chrono::milliseconds updateInterval)
+: CProxyObjSystem(workpoolSize, updateInterval)
+, m_viewerUpdateSvc(TVLOBJ::VIEWER_UPDATE_INTERVAL)
 , m_eState(STATE_CHECK_TARGET)
-, m_nCtxWorkpoolSize(nCtxWorkpoolSize)
-, m_WalkTimer()
 {
 	;
 };
@@ -84,46 +106,19 @@ void CTvlObjSystem::OnRun(void)
         {
             bool bResult = false;
             
-            switch (TvlSettings.BotType)
+            bResult = TvluIsChannelExist(TvlSettings.TargetId);
+            if (bResult)
             {
-            case TvlBotType_Stream:
+                if (!TvlSettings.Test)
                 {
-                    bResult = TvluIsChannelExist(TvlSettings.TargetId);
-                    if (bResult)
-                    {
-                        if (!TvlSettings.Test)
-                        {
-                            bResult = TvluIsChannelLive(TvlSettings.TargetId);
-                            if (!bResult)
-                                CTvlResult::Instance().SetError(CTvlResult::ERRTYPE_STREAM_NOT_LIVE);
-                        };
-                    }
-                    else
-                    {
-                        CTvlResult::Instance().SetError(CTvlResult::ERRTYPE_STREAM_NOT_EXIST);
-                    };
-                }
-                break;
-
-            case TvlBotType_Clip:
-                {
-                    bResult = TvluIsClipExist(TvlSettings.TargetId);
+                    bResult = TvluIsChannelLive(TvlSettings.TargetId);
                     if (!bResult)
-                        CTvlResult::Instance().SetError(CTvlResult::ERRTYPE_CLIP_NOT_EXIST);
-                }
-                break;
-
-            case TvlBotType_Vod:
-                {
-                    bResult = TvluIsVodExist(TvlSettings.TargetId);
-                    if (!bResult)
-                        CTvlResult::Instance().SetError(CTvlResult::ERRTYPE_VOD_NOT_EXIST);
-                }
-                break;
-
-            default:
-                ASSERT(false);
-                break;
+                        TvlResult.SetError(CTvlResult::ERRTYPE_STREAM_NOT_LIVE);
+                };
+            }
+            else
+            {
+                TvlResult.SetError(CTvlResult::ERRTYPE_STREAM_NOT_EXIST);
             };
 
             BranchState(bResult);
@@ -132,58 +127,35 @@ void CTvlObjSystem::OnRun(void)
 
     case STATE_CHECK_PROTECT:
         {
-            if (TvlSettings.BotType == TvlBotType_Stream)
-            {
-                bool bResult = TvluIsChannelProtected(TvlSettings.TargetId);
-                if (bResult)
-                    CTvlResult::Instance().SetError(CTvlResult::ERRTYPE_STREAM_PROTECTED);
-                
-                BranchState(!bResult);
-            }
-            else
-            {
-                BranchState();
-            };
+            bool bResult = TvluIsChannelProtected(TvlSettings.TargetId);
+            if (bResult)
+                TvlResult.SetError(CTvlResult::ERRTYPE_STREAM_PROTECTED);
+
+            BranchState(!bResult);
         }
         break;
 
     case STATE_CHECK_CHANNELID:
         {
-            if (TvlSettings.BotType == TvlBotType_Stream)
-            {
-                int32 ChannelId = TvluGetChannelId(TvlSettings.TargetId);
-                CTvlObjCtx::TargetChannelId = (ChannelId != 0 ? ChannelId : -1);
-                
-                BranchState(ChannelId != 0);
-            }
-            else
-            {
-                BranchState();
-            };
-        }
-        break;
+            int32 ChannelId = TvluGetChannelId(TvlSettings.TargetId);
+            CTvlObjCtx::TargetChannelId = (ChannelId != 0 ? ChannelId : -1);
 
-    case STATE_PRE_RUN:
-        {
-            BranchState();
-            m_WalkTimer.Reset();
+            BranchState(ChannelId != 0);
         }
         break;
 
     case STATE_RUN:
         {
             CProxyObjSystem::OnRun();        
-            int32 Elapsed = std::max(int32(m_WalkTimer.Reset()) - int32(TVLOBJ::SYSTEM_PERIOD_INTERVAL), 0);
-            CTvlResult::Instance().SetCtxObjWalkTime(uint32(Elapsed));
         }
         break;
     };
 };
 
 
-bool CTvlObjSystem::IsEol(void) const
+bool CTvlObjSystem::IsStopped(void) const
 {
-    return ((m_eState == STATE_EOL) || (CProxyObjSystem::GetEolNum() > 0));
+    return ((m_eState == STATE_EOL) || (CProxyObjSystem::GetStoppedNum() > 0));
 };
 
 
@@ -202,10 +174,6 @@ void CTvlObjSystem::BranchState(bool bStateResult)
         break;
 
     case STATE_CHECK_CHANNELID:
-        eStateNext = STATE_PRE_RUN;
-        break;
-
-    case STATE_PRE_RUN:
         eStateNext = STATE_RUN;
         break;
 
@@ -221,93 +189,43 @@ void CTvlObjSystem::BranchState(bool bStateResult)
 };
 
 
-CTvlVwUpdSvc::CTvlVwUpdSvc(void)
-: CAsyncSvc("TvlVwUpd", TVLOBJ::VW_UPD_INTERVAL)
-, m_VwCntPrev(0)
-{
-    ;
-};
+static CTvlObjSystem* TvlObjSystem = nullptr;
 
 
-void CTvlVwUpdSvc::OnRun(void)
-{
-    int32 VwCnt = 0;
-    
-    switch (TvlSettings.BotType)
-    {
-    case TvlBotType_Stream:
-        VwCnt = TvluGetChannelViewersCount(TvlSettings.TargetId);
-        break;
-
-    case TvlBotType_Clip:
-        VwCnt = TvluGetClipViewsCount(TvlSettings.TargetId);
-        break;
-
-    case TvlBotType_Vod:
-        VwCnt = TvluGetVodViewsCount(TvlSettings.TargetId);
-        break;
-
-    default:
-        ASSERT(false);
-        break;
-    };
-
-    if (VwCnt == -1)
-        VwCnt = m_VwCntPrev;
-    
-    m_VwCntPrev = VwCnt;
-    
-    CTvlResult::Instance().SetViewerCountReal(VwCnt);
-};
-
-
-void TvlObjStart(void)
+void TvlObjInitialize()
 {
     TvluInitialize();
+    TvlResult.OnStart();
 
-    int32 nWorkpoolSize = TvlSettings.Viewers;
+    CTvlObjCtx::TargetChannelId = -1;
 
-    if (TvlSettings.RunMode == TvlRunMode_TimeoutTest)
-        nWorkpoolSize = 1;
+#ifdef PRX_TEST
+    uint32 workpoolSize = 1;
+#else
+    uint32 workpoolSize = uint32(TvlSettings.Viewers);
+#endif
 
-    TvlObjSystem = new CTvlObjSystem(nWorkpoolSize, TVLOBJ::SYSTEM_PERIOD_INTERVAL, 0);
-    if (TvlObjSystem)
-    {
-        TvlObjSystem->Start();
-        
-        TvlVwUpdSvc = new CTvlVwUpdSvc();
-        if (TvlVwUpdSvc)
-            TvlVwUpdSvc->Start();
-    };
+    TvlObjSystem = new CTvlObjSystem(workpoolSize, TVLOBJ::SYSTEM_UPDATE_INTERVAL);
 };
 
 
-void TvlObjStop(void)
+void TvlObjTerminate()
 {
-    CHttpReq::suspend();
-    TvluPreTerminate();
-    
-    if (TvlVwUpdSvc)
-    {
-        TvlVwUpdSvc->Stop();
-        delete TvlVwUpdSvc;
-        TvlVwUpdSvc = nullptr;
-    };
-    
     if (TvlObjSystem)
     {
-        TvlObjSystem->Stop();
         delete TvlObjSystem;
         TvlObjSystem = nullptr;
     };
 
-    TvluPostTerminate();
-    CHttpReq::resume();
+    TvlResult.OnStop();
+    TvluTerminate();
 };
 
 
-bool TvlObjIsEol(void)
+bool TvlObjIsStopped()
 {
-    ASSERT(TvlObjSystem);
-    return TvlObjSystem->IsEol();
+    if (TvlObjSystem)
+        return TvlObjSystem->IsStopped();
+    else
+        return true;
 };

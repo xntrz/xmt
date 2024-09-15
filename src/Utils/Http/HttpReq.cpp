@@ -1,217 +1,220 @@
 #include "HttpReq.hpp"
 
 #include "Utils/Misc/WebUtils.hpp"
+#include "Utils/module_obj.hpp"
 
 #include "Shared/Common/Event.hpp"
+#include "Shared/Common/Spinlock.hpp"
 #include "Shared/Network/Net.hpp"
 #include "Shared/Network/NetAddr.hpp"
+#ifdef _DEBUG
+#include "Shared/File/File.hpp"
+#endif
 
 
-struct CHttpReq::context final : public CListNode<context>
+/**
+ * 	Thread local flag for error callback check is error occurs durin sync user call or async network call
+ *	If flag is up all error codes has MSB is set up (see CHttpReq::errcode_is_user() & CHttpReq::context::invoke())
+ */
+thread_local bool net_thread_flag = false;
+
+
+struct CHttpReq::context final
 {
 	enum callback_type
 	{
 		callback_complete = 0,
 		callback_error,
 	};
-
-	enum errcode
+	
+	enum errcode : uint32
 	{
 		errcode_noerr = 0,
 		errcode_transport,
 		errcode_security,
 		errcode_proxy,
-		errcode_unreach,
 		errcode_aborted_during_recv,
-		errcode_canceled,
-		errcode_redirect_empty,
-		errcode_redirect_resend,
-		errcode_send_subsys,
-		errcode_send_endpointinv,
-		errcode_send_inprogress,
-		errcode_send_transport,
+		errcode_already_connected,
+		errcode_redirect_depth_reached,
+		errcode_endpoint_invalid,
 		
 		errcodenum,
 	};
 
-	enum opt
+	enum flag : uint16
 	{
-		opt_complete = BIT(0),
-		opt_inprogress = BIT(1),
+		flag_redirect 	= (1 << 0),
+		flag_keepalive 	= (1 << 1),
+#ifdef _DEBUG
+		flag_dump 		= (1 << 12),
+#endif		
+		flag_default 	= 0,
 	};
 
-	context(void);
-	~context(void);
-	void invoke(callback_type cbtype, int32 errcode);
-	void on_req_construct(CHttpReq* req);
-	void on_req_destruct(CHttpReq* req);
-	bool send(const std::string& Url, uint32 ConnectTimeout);
-	void resolve_redirect(bool flag);
-	void opt_set(uint32 o, bool flag);
-	bool opt_test(uint32 o);
+	context(CHttpReq& req);
+	~context();
+	void close();
+	void cancel();
+	bool invoke(callback_type cbtype, uint32 errcode = errcode_noerr);
+	bool send_first(const std::string& url, const std::string& request, std::chrono::milliseconds timeout);
+	bool send_next(const std::string& request);
+	void flag_set(uint16 f, bool state);
+	bool flag_test(uint16 f);
+	void set_read_timeout(std::chrono::milliseconds ms);
+	void set_proxy(NETPROXY type, uint64 netaddr, const NETPROXYPARAM* param);
+	void clear_proxy();
+	void wait();
+	bool wait(std::chrono::milliseconds ms);
+	bool event_proc(HOBJ hConn, NETEVENT evt, uint32 errcode, uint64 netaddr, const void* data, uint32 dize, void* param);
+	bool redirect_proc();
+	void dump_on_complete(bool state);
 
-	HOBJ m_hEventReady;
-	HOBJ m_hConn;
-	int32 m_errcode;
-	CHttpReq* m_pReq;
-	redirect* m_pRedirect;
-	std::string m_Request;
-	CHttpResponse m_Response;
-	CompleteCallback m_CallbackComp;
-	ErrorCallback m_CallbackErr;
-	std::recursive_mutex m_CallbackMutex;
+	inline bool is_complete() const {
+		return !NetTcpIsConnected(m_hConn);
+	};
+	
+	inline void ref_inc() {
+		++m_refCnt;
+	};
+	
+	inline void ref_dec() {
+		ASSERT(m_refCnt > 0u);
+		if (!--m_refCnt)
+		{
+			ASSERT(m_refCntUser == 0u);
+			delete this;
+		};
+	};
+
+	inline void ref_inc_user() {
+		if (!m_refCntUser++)
+			ref_inc();
+	};
+
+	inline void ref_dec_user() {
+		ASSERT(m_refCntUser > 0u);
+		if (!--m_refCntUser)
+		{
+			close();
+			ref_dec();
+		}
+		else
+		{
+			ASSERT(false);
+		};
+	};
+
+	CEvent 						m_evtReady;
+	HCONN 						m_hConn;
+	uint32 						m_errcode;
+	CHttpReq& 					m_reqObj;
+	std::string 				m_reqBody;
+	CHttpResponse 				m_response;
+	CompleteCallback 			m_cbComplete;
+	ErrorCallback 				m_cbError;
+	std::recursive_mutex 		m_cbMutex;
 	struct
 	{
 		std::string domain;
 		uint16 port;
 	} m_endpoint;
-	std::atomic<uint32> m_optmask;
+	std::atomic<uint16> 		m_flags;
+	std::atomic<int8> 			m_redirectMax;
+	std::atomic<int8> 			m_redirectCur;
+	std::atomic<uint16> 		m_refCnt;
+	std::atomic<uint16> 		m_refCntUser;
+	std::chrono::milliseconds	m_connectionTimeout;
+	module_obj 					m_moduleObj;
 };
 
 
-struct CHttpReq::redirect final
-{	
-	bool on_complete(context& ctx, CHttpResponse& resp);
-};
-
-
-struct CHttpReq::netevent final
-{
-	static bool proc(
-		HOBJ        hConn,
-		NetEvent_t  Event,
-		uint32      ErrorCode,
-		uint64      NetAddr,
-		const char* Data,
-		uint32      DataSize,
-		void* 		Param
-	);
-};
-
-
-struct CHttpReq::container final
-{
-public:
-	void init(void);
-	void term(void);
-	void ref_inc(void);
-	void ref_dec(void);
-	void regist(CHttpReq* req);
-	void remove(CHttpReq* req);
-	void suspend(void);
-	void resume(void);
-	bool is_paused(void);
-	void cancelation_proc(void);
-	bool is_run(void) const;
-
-private:	
-	std::atomic<int32> m_iRefCount;
-	std::mutex m_Mutex;
-	CList<CHttpReq> m_ListReq;
-	HOBJ m_hEventRefEnd;
-	bool m_bFlagRun;
-	std::atomic<int32> m_iPauseLevel;
-};
-
-
-static CHttpReq::container HttpReqContainer;
-
-
-CHttpReq::context::context(void)
-: m_hEventReady(EventCreate())
-, m_hConn(0)
+CHttpReq::context::context(CHttpReq& req)
+: m_evtReady()
+, m_hConn(NetTcpOpen(std::bind(&context::event_proc, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6, std::placeholders::_7)))
 , m_errcode(errcode_noerr)
-, m_pReq(nullptr)
-, m_pRedirect(nullptr)
-, m_Request()
-, m_Response()
-, m_CallbackComp()
-, m_CallbackErr()
-, m_CallbackMutex()
+, m_reqObj(req)
+, m_reqBody()
+, m_response()
+, m_cbComplete(nullptr)
+, m_cbError(nullptr)
+, m_cbMutex()
 , m_endpoint()
-, m_optmask(0)
+, m_flags(flag_default)
+, m_redirectMax(0u)
+, m_redirectCur(0u)
+, m_refCnt(0u)
+, m_refCntUser(0u)
+, m_connectionTimeout(0)
+, m_moduleObj("http")
 {
-	opt_set(opt_complete, true);
-	opt_set(opt_inprogress, false);
+	ASSERT(m_hConn);
+	module_obj_regist(&m_moduleObj);
 };
 
 
-CHttpReq::context::~context(void)
+CHttpReq::context::~context()
 {
-	if (m_hConn)
+	module_obj_remove(&m_moduleObj);
+	
+	if (m_hConn) 
 	{
 		NetTcpClose(m_hConn);
 		m_hConn = 0;
 	};
-
-	if (m_hEventReady)
-	{
-		EventDestroy(m_hEventReady);
-		m_hEventReady = 0;
-	};
-
-	if (m_pRedirect)
-	{
-		delete m_pRedirect;
-		m_pRedirect = nullptr;
-	};
 };
 
 
-void CHttpReq::context::invoke(callback_type cbtype, int32 errcode)
-{	
-	std::unique_lock<std::recursive_mutex> Lock(m_CallbackMutex);
+void CHttpReq::context::close()
+{
+	cancel();
 	
-	switch (cbtype)
+	std::unique_lock<std::recursive_mutex> lock(m_cbMutex);
+	m_cbComplete = nullptr;
+	m_cbError = nullptr;
+};
+
+
+void CHttpReq::context::cancel()
+{
+	NetTcpCancelConnect(m_hConn);
+	NetTcpDisconnect(m_hConn);
+};
+
+
+bool CHttpReq::context::invoke(callback_type cbtype, uint32 errcode /*= errcode_noerr*/)
+{	
+	std::unique_lock<std::recursive_mutex> lock(m_cbMutex);
+
+	bool bResult = true;
+
+	switch (cbtype) 
 	{
 	case callback_complete:
 		{
-			opt_set(opt_inprogress, false);
-			
-			//
-			//	By default is true to allow invoke user callback if redirect is not handling
-			//
-			bool bResult = true;
-			
-			//
-			//	Intercept for handling redirect if requested
-			//
-			if (m_pRedirect)
-				bResult = m_pRedirect->on_complete(*this, m_Response);
+			/* intercept for handling redirect if requested */
+			if (flag_test(flag_redirect) && httpstatus::is_redirect(m_response.status()))
+			{
+				if (m_redirectCur++ < m_redirectMax) 
+				{
+					bResult = redirect_proc();
+				}
+				else 
+				{
+					invoke(callback_error, errcode_redirect_depth_reached);
+					bResult = false;
+				};
+			};
 
 			if (bResult)
-			{
-				if (m_CallbackComp)
-					m_CallbackComp(*m_pReq, m_Response);
-
-				//
-				//	check if request is not initiated in callback
-				//
-				if (!opt_test(opt_inprogress))
-				{
-					opt_set(opt_complete, true);
-					EventSignalAll(m_hEventReady);
-				};				
-			};
+				bResult = (m_cbComplete ? m_cbComplete(m_reqObj, m_response) : false);			
 		}
 		break;
 
 	case callback_error:
 		{
-			opt_set(opt_inprogress, false);
-			
 			m_errcode = errcode;
-			if (m_CallbackErr)
-				m_CallbackErr(*m_pReq, errcode);
-
-			//
-			//	check if request is not initiated in callback
-			//
-			if (!opt_test(opt_inprogress))
-			{
-				opt_set(opt_complete, true);
-				EventSignalAll(m_hEventReady);
-			};			
+			if (m_cbError)
+				m_cbError(m_reqObj, (net_thread_flag ? errcode : (errcode | 0x80000000u)));
 		}
 		break;
 
@@ -219,117 +222,76 @@ void CHttpReq::context::invoke(callback_type cbtype, int32 errcode)
 		ASSERT(false);
 		break;
 	};
+
+	return bResult;
 };
 
 
-void CHttpReq::context::on_req_construct(CHttpReq* req)
+bool CHttpReq::context::send_first(const std::string& url, const std::string& request, std::chrono::milliseconds timeout)
 {
-	m_hConn = NetTcpOpen(netevent::proc, this);
-	
-	std::unique_lock<std::recursive_mutex> Lock(m_CallbackMutex);
-	m_pReq = req;
-};
-
-
-void CHttpReq::context::on_req_destruct(CHttpReq* req)
-{
-	//
-	//	Now close guaranteed that all threads leave event proc before close
-	//
-	if (m_hConn)
+	if (NetTcpIsConnected(m_hConn))
 	{
-		NetTcpClose(m_hConn);
-		m_hConn = 0;
-	};
-	
-	std::unique_lock<std::recursive_mutex> Lock(m_CallbackMutex);
-	m_CallbackComp = {};
-	m_CallbackErr = {};
-	m_pReq = nullptr;
-};
-
-
-bool CHttpReq::context::send(const std::string& Url, uint32 ConnectTimeout)
-{
-	if (HttpReqContainer.is_paused())
-	{
-		invoke(context::callback_error, context::errcode_send_subsys);
+		invoke(context::callback_error, context::errcode_already_connected);
 		return false;
 	};
 
-	if (opt_test(opt_inprogress))
+	/* extract domain */
+	m_endpoint.domain.clear();
+	m_endpoint.domain = WebUrlExtractDomain(url);
+	if (m_endpoint.domain.empty())
 	{
-		invoke(context::callback_error, context::errcode_send_inprogress);
+		invoke(context::callback_error, context::errcode_endpoint_invalid);
 		return false;
 	};
 
-	uint16 Port = 0;
-	std::string Host = WebUrlExtractDomain(Url);
-	std::string Proto = WebUrlExtractProto(Url);
-	
-	std::transform(
-		Proto.begin(),
-		Proto.end(),
-		Proto.begin(),
-		[](char ch)
-		{
-			return std::tolower(ch); 
-		}
-	);
-
-	if (!Proto.empty())
+	/* extract port */
+	m_endpoint.port = 0;
+	std::string proto = WebUrlExtractProto(url);
+	if (!proto.empty())
 	{
-		if (Proto.compare("http") == 0)
-			Port = 80;
-		else if (Proto.compare("https") == 0)
-			Port = 443;
+		/* proto is exist in url - match proto to port number */
+		strtolower(proto);
+		if (proto == "http" || proto == "ws")
+			m_endpoint.port = 80;
+		else if (proto == "https" || proto == "wss")
+			m_endpoint.port = 443;
+		else
+			DbgFatal("unknown protocol port for http request: %s", proto.c_str());
 	}
 	else
 	{
-		std::string PortStr = WebUrlExtractPort(Url);
-		if (!PortStr.empty())
-			Port = std::atoi(PortStr.c_str());
+		/* proto not exist in url - to extract port number */
+		std::string port = WebUrlExtractPort(url);
+		if (!port.empty())
+			m_endpoint.port = std::stoi(port);
+		else
+			m_endpoint.port = 80; /* proto & port number do not exist in url, set HTTP 80 port as default case */
 	};
-	
-	m_endpoint.domain = Host;
-	m_endpoint.port = Port;
 
-	if (m_endpoint.port == 0 ||
-		m_endpoint.domain.empty())
+	if (m_endpoint.port == 0)
 	{
-		invoke(context::callback_error, context::errcode_send_endpointinv);
+		invoke(context::callback_error, context::errcode_endpoint_invalid);
 		return false;
 	};
 
-	switch (Port)
-	{
-	case 443:
-		{
-			NetTcpSetSecure(m_hConn, true);
-			NetTcpSetSecureHost(m_hConn, Host.c_str());
-		}
-		break;
-
-	case 80:
-		{
-			NetTcpSetSecure(m_hConn, false);
-		}
-		break;
-	};
-
+	/* setup per connect data */
 	m_errcode = errcode_noerr;
-	m_Response.clear();
-	opt_set(opt_complete, false);
-	opt_set(opt_inprogress, true);
-	ConnectTimeout = (ConnectTimeout > 1000 ? ConnectTimeout : 20000);
+	m_response.clear();
+	m_connectionTimeout = std::max(timeout, std::chrono::milliseconds(1000));
+	m_reqBody = request;
+	flag_set(flag_keepalive, false);
 
-	NetTcpSetUserParam(m_hConn, (void*)ConnectTimeout);
-	
-	if (!NetTcpConnect(m_hConn, m_endpoint.domain.c_str(), m_endpoint.port, ConnectTimeout))
+	/* setup connection ssl */
+	NetTcpSetSecure(m_hConn, (WebIsSecurePort(m_endpoint.port) ? true : false));
+	if (WebIsSecurePort(m_endpoint.port))
+		NetTcpSetSecureHost(m_hConn, m_endpoint.domain.c_str());
+
+	/* start connect */
+	ref_inc();
+	if (!NetTcpConnect(m_hConn, m_endpoint.domain.c_str(), m_endpoint.port, uint32(m_connectionTimeout.count())))
 	{
-		opt_set(opt_complete, true);
-		opt_set(opt_inprogress, false);
-		invoke(context::callback_error, context::errcode_send_transport);
+		invoke(context::callback_error, context::errcode_transport);
+		ref_dec();
 		return false;
 	};
 
@@ -337,467 +299,402 @@ bool CHttpReq::context::send(const std::string& Url, uint32 ConnectTimeout)
 };
 
 
-void CHttpReq::context::resolve_redirect(bool flag)
+bool CHttpReq::context::send_next(const std::string& request)
 {
-	if (flag)
-	{
-		if (!m_pRedirect)
+	if (request.empty())
+		return false;
+
+	if (!flag_test(flag_keepalive))
+		return false;
+
+	m_response.clear();
+	return (NetTcpSend(m_hConn, &request[0], request.length()) > 0);
+};
+
+
+void CHttpReq::context::flag_set(uint16 f, bool state)
+{
+	(state ? m_flags.fetch_or(f) : m_flags.fetch_and(~f));
+};
+
+
+bool CHttpReq::context::flag_test(uint16 f)
+{
+	return ((m_flags.load() & f) == f);
+};
+
+
+void CHttpReq::context::set_read_timeout(std::chrono::milliseconds ms)
+{
+	NetTcpSetTimeoutRead(m_hConn, uint32(ms.count()));
+};
+
+
+void CHttpReq::context::set_proxy(NETPROXY type, uint64 netaddr, const NETPROXYPARAM* param)
+{
+	NetTcpClearProxy(m_hConn);
+	NetTcpSetProxy(m_hConn, type, netaddr, param);
+};
+
+
+void CHttpReq::context::clear_proxy()
+{
+	NetTcpClearProxy(m_hConn);
+};
+
+
+void CHttpReq::context::wait()
+{
+	return m_evtReady.wait([this]() {
+		return !NetTcpIsConnected(m_hConn);
+	});
+};
+
+
+bool CHttpReq::context::wait(std::chrono::milliseconds ms)
+{
+	return m_evtReady.wait_for(ms, [this]() {
+		return !NetTcpIsConnected(m_hConn);
+	});
+};
+
+
+bool CHttpReq::context::event_proc(HOBJ hConn, NETEVENT evt, uint32 errcode, uint64 netaddr, const void* data, uint32 size, void* param)
+{
+	bool bResult = true;
+	net_thread_flag = true;
+
+	switch (evt) {
+	case NETEVENT_CONNECTFAIL:
+	case NETEVENT_CONNECTFAILPRX:
+	case NETEVENT_CONNECTFAILSSL:
 		{
-			m_pRedirect = new redirect;
-			ASSERT(m_pRedirect);
-		};
-	}
-	else
-	{
-		if (m_pRedirect)
+			uint32 err = context::errcode_transport;
+			if (evt == NETEVENT_CONNECTFAILPRX)
+				err = context::errcode_proxy;
+			else if (evt == NETEVENT_CONNECTFAILSSL)
+				err = context::errcode_security;
+
+			invoke(context::callback_error, err);
+
+			m_evtReady.signal_all();
+		}
+		break;
+
+	case NETEVENT_CONNECT:
 		{
-			delete m_pRedirect;
-			m_pRedirect = nullptr;
-		};
+			ref_inc();
+
+			if (m_reqBody.length() > 0)
+				NetTcpSend(m_hConn, &m_reqBody[0], m_reqBody.length());
+			else
+				bResult = false;
+		}
+		break;
+
+	case NETEVENT_RECV:
+		{
+			ref_inc();
+
+			if (!m_response.process(data, size))
+			{
+				bResult = false;
+				break;
+			};
+
+			if (!m_response.is_complete())
+				break;
+
+#ifdef _DEBUG
+			/**
+			 *	DEBUG ONLY
+			 *	Make dump of html page when request is complete
+			 */
+			if (flag_test(flag_dump))
+			{				
+				HOBJ hFile = 0;
+				int32 no = 0;
+				std::string filename;
+
+				/**
+				 *	Check file name for busy
+				 *	So if we able to open file for reading that mean file is exist
+				 *	Iterate until we find not existing file for new one
+				 */
+				do
+				{
+					filename = "http_req_dump_" + std::to_string(no++) + ".html";
+					hFile = FileOpen(filename.c_str(), "rb");
+				} while (hFile);
+
+				hFile = FileOpen(filename.c_str(), "wb");
+				if (hFile)
+				{
+					FileWrite(hFile, m_response.body(), uint32(m_response.body_size()));
+					FileFlush(hFile);
+					FileClose(hFile);
+				};
+			};
+#endif
+
+			flag_set(flag_keepalive, m_response.is_keepalive());
+			if (flag_test(flag_keepalive))
+			{
+				if (!invoke(context::callback_complete))
+					bResult = false;
+				else
+					m_response.clear();
+			}
+			else
+			{
+				bResult = false;
+			};
+		}
+		break;
+
+	case NETEVENT_DISCONNECT:
+		{
+			if (!m_reqBody.empty() && !m_response.is_complete() && !flag_test(flag_keepalive))
+			{
+				/* May be disconnected by server bandwidth limitation per one IP during many reads or invalid response */
+				invoke(context::callback_error, context::errcode_aborted_during_recv);
+			}
+			else
+			{
+				invoke(context::callback_complete);
+			};
+
+			/* wait will not end until connection is opened (in user callback or redirect callback for example) */
+			m_evtReady.signal_all();
+		}
+		break;
 	};
+
+	ref_dec();
+
+	net_thread_flag = false;
+	return bResult;
 };
 
 
-void CHttpReq::context::opt_set(uint32 o, bool flag)
+bool CHttpReq::context::redirect_proc()
 {
-	if (flag)
-		m_optmask.fetch_or(o);
-	else
-		m_optmask.fetch_and(~o);
-};
+	/**
+	 *	RETURN VALUE MEANING:
+	 *		FALSE	-	delay completion callback until we got right location
+	 *		TRUE	-	we got final location allow processing completion callback
+	 */
 
-
-bool CHttpReq::context::opt_test(uint32 o)
-{
-	return IS_FLAG_SET(m_optmask.load(), o);
-};
-
-
-bool CHttpReq::redirect::on_complete(context& ctx, CHttpResponse& resp)
-{
-	//
-	//	handle "connect only" case (if request empty)
-	//
-	if (ctx.m_Request.empty())
+	/* handle "connect only" case (if request empty) */
+	if (m_reqBody.empty())
 		return true;
 
-	//
-	//	response is not redirect
-	//
-	if (!httpstatus::is_redirect(resp.status()))
-		return true;
-
-	//
-	//	response not contain location header
-	//
-	std::string Url = resp.header_value("location");
+	/* response not contain location header */
+	std::string Url = m_response.header_value("location");
 	if (Url.empty())
-	{
-		ctx.invoke(context::callback_error, context::errcode_redirect_empty);
 		return false;
-	};
 
-	//
-	//	Replace host with redirect location
-	//
-	WebStrRep(ctx.m_Request, ctx.m_endpoint.domain, WebUrlExtractDomain(Url));
+	/* Replace host with redirect location */
+	std::string loc = WebUrlExtractDomain(Url);
+	ASSERT(loc.empty() == false);
+	httputils::change_request_location(m_reqBody, loc);
 
-	//
-	//	Send request again
-	//
-	if (!ctx.send(Url, 5000))
-	{
-		ctx.invoke(context::callback_error, context::errcode_redirect_resend);
+	/* initiate request again with new location */
+	if (!send_first(Url, m_reqBody, m_connectionTimeout))
 		return false;
-	};
 
 	return false;
 };
 
 
-/*static*/ bool CHttpReq::netevent::proc(
-	HOBJ        hConn,
-	NetEvent_t  Event,
-	uint32      ErrorCode,
-	uint64      NetAddr,
-	const char* Data,
-	uint32      DataSize,
-	void* 		Param
-)
+void CHttpReq::context::dump_on_complete(bool state)
 {
-	if (!HttpReqContainer.is_run())
-		return false;
-
-	HttpReqContainer.ref_inc();
-
-	ASSERT(Param);
-	CHttpReq::context& Ctx = *(CHttpReq::context*)Param;
-
-	switch (Event)
-	{
-	case NetEvent_ConnectFail:
-	case NetEvent_ConnectFailProxy:
-	case NetEvent_ConnectFailSsl:
-		{
-			int32 errcode = context::errcode_noerr;
-
-			if (Event == NetEvent_ConnectFail)
-				errcode = context::errcode_transport;
-			else if (Event == NetEvent_ConnectFailProxy)
-				errcode = context::errcode_proxy;
-			else if (Event == NetEvent_ConnectFailSsl)
-				errcode = context::errcode_security;
-			else
-				errcode = context::errcodenum;	// force unknown error
-			
-			Ctx.invoke(context::callback_error, errcode);
-		}
-		break;
-
-	case NetEvent_Connect:
-		{
-			if (Ctx.m_Request.length() > 0)
-				NetTcpSend(Ctx.m_hConn, &Ctx.m_Request[0], Ctx.m_Request.length());
-			else
-				NetTcpDisconnect(Ctx.m_hConn);
-		}
-		break;
-
-	case NetEvent_Recv:
-		{
-			CHttpResponse& Response = Ctx.m_Response;
-
-			if (!Response.process(Data, DataSize))
-			{
-				NetTcpDisconnect(Ctx.m_hConn);
-				break;
-			};
-
-			if (!Response.is_complete())
-				break;
-
-			NetTcpDisconnect(Ctx.m_hConn);
-		}
-		break;
-
-	case NetEvent_Disconnect:
-		{						
-			if (!Ctx.m_Request.empty())
-			{
-				if (!Ctx.m_Response.is_complete())
-				{
-					//
-					//	May be disconnected by server bandwidth limitation per one IP during many reads
-					// 	So interpret it as transport error
-					//
-					Ctx.invoke(context::callback_error, context::errcode_aborted_during_recv);
-				}
-				else
-				{
-					Ctx.invoke(context::callback_complete, context::errcode_noerr);
-				};
-			}
-			else
-			{
-				Ctx.invoke(context::callback_complete, context::errcode_noerr);
-			};
-		}
-		break;
-	};
-
-	HttpReqContainer.ref_dec();
-
-	return true;
+#ifdef _DEBUG
+	flag_set(flag_dump, state);
+#endif
 };
 
 
-void CHttpReq::container::init(void)
+/*static*/ const char* CHttpReq::errcode_to_str(uint32 errcode)
 {
-	m_iRefCount = 0;
-	m_ListReq.clear();
-	m_hEventRefEnd = EventCreate();
-	m_bFlagRun = true;
-};
-
-
-void CHttpReq::container::term(void)
-{
-	m_bFlagRun = false;
-	
-	if (m_iRefCount > 0)
-	{
-		if (!EventWaitFor(m_hEventRefEnd, 5000))
-			ASSERT(false);
-	};
-
-	if (m_hEventRefEnd)
-	{
-		EventDestroy(m_hEventRefEnd);
-		m_hEventRefEnd = 0;
-	};
-};
-
-
-void CHttpReq::container::ref_inc(void)
-{
-	++m_iRefCount;
-};
-
-
-void CHttpReq::container::ref_dec(void)
-{
-	ASSERT(m_iRefCount > 0);
-	if (!--m_iRefCount)
-	{
-		if (!is_run())
-			EventSignalAll(m_hEventRefEnd);
-	};
-};
-
-
-void CHttpReq::container::regist(CHttpReq* req)
-{
-	std::unique_lock<std::mutex> Lock(m_Mutex);
-	m_ListReq.push_back(req);
-};
-
-
-void CHttpReq::container::remove(CHttpReq* req)
-{
-	std::unique_lock<std::mutex> Lock(m_Mutex);
-	m_ListReq.erase(req);
-};
-
-
-void CHttpReq::container::suspend(void)
-{
-	++m_iPauseLevel;
-	cancelation_proc();
-};
-
-
-void CHttpReq::container::resume(void)
-{
-	ASSERT(m_iPauseLevel > 0);
-	--m_iPauseLevel;
-};
-
-
-bool CHttpReq::container::is_paused(void)
-{
-	return (m_iPauseLevel > 0);
-};
-
-
-void CHttpReq::container::cancelation_proc(void)
-{
-	std::unique_lock<std::mutex> Lock(m_Mutex);
-	for (auto& it : m_ListReq)
-		it.cancel();
-};
-
-
-bool CHttpReq::container::is_run(void) const
-{
-	return m_bFlagRun;
-};
-
-
-/*static*/ void CHttpReq::initialize(void)
-{
-	HttpReqContainer.init();
-};
-
-
-/*static*/ void CHttpReq::terminate(void)
-{
-	HttpReqContainer.term();
-};
-
-
-/*static*/ void CHttpReq::suspend(void)
-{
-	HttpReqContainer.suspend();
-};
-
-
-/*static*/ void CHttpReq::resume(void)
-{
-	HttpReqContainer.resume();
-};
-
-
-/*static*/ void CHttpReq::cancel_all(void)
-{
-	HttpReqContainer.cancelation_proc();
-};
-
-
-/*static*/ const char* CHttpReq::errcode_to_str(int32 errcode)
-{
-	static const char* const ErrcodeToStrTbl[] =
-	{
+	static const char* const errcode2str[] = {
 		"No error",
 		"Transport error",
-		"tls/ssl error",
-		"proxy error",
-		"host is unreach",
-		"connection was aborted while doing recv",
-		"request was canceled",
-		"redirect location is empty",
-		"redirect resend request error",
-		"send failed subsystem down",
-		"send failed endpoint invalid",
-		"send failed already in progress",
-		"send failed transport layer internal error",
+		"TLS/SSL error",
+		"Proxy error",
+		"Connection was aborted while doing recv",
+		"Already connected",
+		"Redirect depth reached",
+		"Endpoint invalid",
 	};
 
-	static_assert(COUNT_OF(ErrcodeToStrTbl) == context::errcodenum, "update me");
+	static_assert(COUNT_OF(errcode2str) == context::errcodenum, "update me");
+	
+	errcode &= 0x7FFFFFFFu; // check code value
 
-	if (errcode >= 0 && errcode < COUNT_OF(ErrcodeToStrTbl))
-		return ErrcodeToStrTbl[errcode];
-	else
-		return "Unknown error";
+	return (errcode < COUNT_OF(errcode2str) ? errcode2str[errcode] : "unknown error");
 };
 
 
-CHttpReq::CHttpReq(void)
+/*static*/ bool CHttpReq::errcode_is_user(uint32 errcode)
+{
+	return ((errcode & 0x80000000u) == 0x80000000u); // check flag value
+};
+
+
+CHttpReq::CHttpReq()
 : m_pContext(nullptr)
 {	
-	m_pContext = new context;
-	m_pContext->on_req_construct(this);
-	
-	HttpReqContainer.regist(this);
+	m_pContext = new context(*this);
+	m_pContext->ref_inc_user();
 };
 
 
-CHttpReq::~CHttpReq(void)
+CHttpReq::CHttpReq(CHttpReq&& r)
 {
-	HttpReqContainer.remove(this);
-	
+	m_pContext = r.m_pContext;
+	r.m_pContext = nullptr;
+};
+
+
+CHttpReq::CHttpReq(const CHttpReq& r)
+{
+	m_pContext = r.m_pContext;
+	m_pContext->ref_inc_user();
+};
+
+
+CHttpReq& CHttpReq::operator=(const CHttpReq& r)
+{
+	m_pContext = r.m_pContext;
+	m_pContext->ref_inc_user();
+	return *this;
+};
+
+
+CHttpReq::~CHttpReq()
+{
 	if (m_pContext)
-	{
-		m_pContext->on_req_destruct(this);
-		delete m_pContext;
-		m_pContext = nullptr;
-	};
+		m_pContext->ref_dec_user();
 };
 
 
-void CHttpReq::cancel(void)
+void CHttpReq::close()
 {
-	NetTcpCancelConnect(ctx().m_hConn);
-	NetTcpDisconnect(ctx().m_hConn);	
+	ctx().close();
 };
 
 
-bool CHttpReq::send(const std::string& Url, uint32 ConnectTimeout)
+void CHttpReq::cancel()
 {
-	return ctx().send(Url, ConnectTimeout);
+	ctx().cancel();
+};
+
+
+void CHttpReq::send(const std::string& url, const std::string& request, std::chrono::milliseconds timeout /*= std::chrono::milliseconds(0)*/)
+{
+	ctx().m_redirectCur = 0u;
+	ctx().send_first(url, request, timeout);
+};
+
+
+void CHttpReq::send(const std::string& request)
+{
+	ctx().m_redirectCur = 0u;
+	ctx().send_next(request);
 };
 
 
 void CHttpReq::on_complete(CompleteCallback cb)
 {
-	if (!ctx().opt_test(context::opt_complete))
-		return;
-
-	ctx().m_CallbackComp = cb;
+	//if (ctx().flag_test(context::flag_ready))
+		ctx().m_cbComplete = cb;
 };
 
 
 void CHttpReq::on_error(ErrorCallback cb)
 {
-	if (!ctx().opt_test(context::opt_complete))
-		return;
-
-	ctx().m_CallbackErr = cb;
+	//if (ctx().flag_test(context::flag_ready))
+		ctx().m_cbError = cb;
 };
 
 
-void CHttpReq::set_request(const std::string& Request)
+void CHttpReq::set_read_timeout(std::chrono::milliseconds ms)
 {
-	if (!ctx().opt_test(context::opt_complete))
-		return;
-
-	ctx().m_Request = Request;
+	ctx().set_read_timeout(ms);
 };
 
 
-void CHttpReq::set_timeout(uint32 ms)
+void CHttpReq::set_proxy(NETPROXY type, uint64 netaddr, const NETPROXYPARAM* param /*= nullptr*/)
 {
-	NetTcpSetTimeoutRead(ctx().m_hConn, ms);
+	ctx().set_proxy(type, netaddr, param);
 };
 
 
-void CHttpReq::set_proxy(NetProxy_t ProxyType, uint64 NetAddr, void* Parameter, int32 ParameterLen)
+void CHttpReq::clear_proxy()
 {
-	NetTcpClearProxy(ctx().m_hConn);
-	NetTcpSetProxy(ctx().m_hConn, ProxyType, NetAddr, Parameter, ParameterLen);
+	ctx().clear_proxy();
 };
 
 
-bool CHttpReq::is_complete(void)
+void CHttpReq::resolve_redirect(bool state, int32 depth /*= 7*/)
 {
-	return ctx().opt_test(context::opt_complete);
+	ctx().m_redirectMax = int8(state ? depth : 0);
+	ctx().flag_set(context::flag_redirect, state);
 };
 
 
-CHttpResponse& CHttpReq::response(void)
+CHttpResponse& CHttpReq::response()
 {
-	return ctx().m_Response;
+	return ctx().m_response;
 };
 
 
-void CHttpReq::wait(void)
+bool CHttpReq::is_complete()
 {
-	if (ctx().opt_test(context::opt_complete))
-		return;
-
-	EventWait(
-		ctx().m_hEventReady,
-		[](void* Param) { return ((CHttpReq::context*)Param)->opt_test(context::opt_complete); },
-		&ctx()
-	);
+	return ctx().is_complete();
 };
 
 
-bool CHttpReq::wait(uint32 ms)
+HCONN CHttpReq::conn_handle()
 {
-	if (ctx().opt_test(context::opt_complete))
-		return true;
-
-	return EventWaitFor(
-		ctx().m_hEventReady,
-		ms,
-		[](void* Param) { return ((CHttpReq::context*)Param)->opt_test(context::opt_complete); },
-		&ctx()
-	);
+	return ctx().m_hConn;
 };
 
 
-void CHttpReq::resolve_redirect(bool flag)
-{
-	if (!ctx().opt_test(context::opt_complete))
-		return;
-
-	ctx().resolve_redirect(flag);
-};
-
-
-std::string CHttpReq::get_host(void)
+std::string CHttpReq::host()
 {
 	return ctx().m_endpoint.domain;
 };
 
 
-int32 CHttpReq::get_errcode(void)
+uint32 CHttpReq::errcode()
 {
 	return ctx().m_errcode;
 };
 
 
-CHttpReq::context& CHttpReq::ctx(void)
+void CHttpReq::wait()
+{
+	ctx().wait();
+};
+
+
+bool CHttpReq::wait(std::chrono::milliseconds ms)
+{
+	return ctx().wait(ms);
+};
+
+
+void CHttpReq::dump_on_complete(bool state)
+{
+#ifdef _DEBUG
+	ctx().dump_on_complete(state);
+#endif	
+};
+
+
+CHttpReq::context& CHttpReq::ctx()
 {
 	ASSERT(m_pContext);
 	return *m_pContext;

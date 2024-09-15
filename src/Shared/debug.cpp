@@ -3,12 +3,20 @@
 #include "Common/Time.hpp"
 #include "Common/Thread.hpp"
 
+#include <intrin.h>
 
-struct DbgModule_t
+
+#define DbgInitReturnAddress() \
+    (DbgReturnAddress = (DbgReturnAddress ? DbgReturnAddress : _ReturnAddress()), DbgReturnAddress)
+
+#define DbgClearReturnAddress() \
+    (DbgReturnAddress = nullptr)
+
+
+struct DbgContainerModule_t
 {
-    const char* Label;
-    HINSTANCE hInstance;
-    uint32 ModuleSize;
+    HMODULE base;
+    char label[64];
 };
 
 
@@ -18,38 +26,46 @@ struct DbgContainer_t
     FILE* StdOut;
     FILE* StdErr;
     HWND hWndConsole;
-    CRITICAL_SECTION Cs;
-    DbgModule_t aModule[MODULE_MAX];
+    std::recursive_mutex Mutex;
+    DbgContainerModule_t Modules[32];
     bool FlagAssertion;
 };
 
 
 static DbgContainer_t DbgContainer;
-static const char* MODULE_LABEL_UNKNOWN = "UnkMod";
-static const HINSTANCE MODULE_HANDLE_UNKNOWN = HINSTANCE(-1);
+thread_local void* DbgReturnAddress = nullptr;
 
 
-static const DbgModule_t* DbgSearchModuleByAddress(void* Address)
+static HMODULE DbgGetModuleBaseByAddress(void* Address)
 {
-    for (int32 i = 0; i < COUNT_OF(DbgContainer.aModule); ++i)
-    {
-        DbgModule_t* DbgModule = &DbgContainer.aModule[i];
+    HMODULE hModule = NULL;
+    DWORD dwFlags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
 
-        if (DbgModule->hInstance != NULL)
-        {
-            if ((uint32(Address) >= uint32(DbgModule->hInstance)) &&
-                (uint32(Address) <= (uint32(DbgModule->hInstance) + DbgModule->ModuleSize)))
-                return DbgModule;
-        };        
-    };
+    GetModuleHandleEx(dwFlags, LPTSTR(Address), &hModule);
 
-    return nullptr;
+    return hModule;
 };
 
 
-static void DbgOutputCommon(void* CallerAddress, bool ln, const char* fname, int32 fline, const char* format, va_list& vl)
+static const char* DbgGetModuleNameByAddress(void* Address)
 {
-	char szOutputBuffer[4096 * 32];
+    HMODULE hModule = DbgGetModuleBaseByAddress(Address);
+    if (hModule != NULL)
+    {
+        for (int32 i = 0; i < COUNT_OF(DbgContainer.Modules); ++i)
+        {
+            if (DbgContainer.Modules[i].base == hModule)
+                return DbgContainer.Modules[i].label;
+        };
+    };
+
+    return "UNKNOWN_MODULE_NAME";
+};
+
+
+static void DbgOutputCommon(bool ln, const char* fname, int32 fline, const char* format, va_list& vl)
+{
+	char szOutputBuffer[4096 * 4];
     szOutputBuffer[0] = '\0';
 
     uint32 Hour = 0;
@@ -58,31 +74,26 @@ static void DbgOutputCommon(void* CallerAddress, bool ln, const char* fname, int
     uint32 Ms = 0;
     TimeCurrentLocal(&Hour, &Minute, &Second, &Ms);
 
-    const char* pszModuleLabel = MODULE_LABEL_UNKNOWN;
-    const DbgModule_t* DbgModule = DbgSearchModuleByAddress(CallerAddress);
-    if (DbgModule)
-        pszModuleLabel = DbgModule->Label;
+    const char* mname = DbgGetModuleNameByAddress(DbgReturnAddress);
 
     int32 offset = std::sprintf(
         szOutputBuffer,
-        "[%02d:%02d:%02d.%03.0f][%s]: %s.%d -- ",
-        Hour, Minute, Second, float(Ms), pszModuleLabel, fname, fline
+        "[%02" PRIu32 ":%02" PRIu32 ":%02" PRIu32 ":%03.0f][%s]: %s.%" PRIi32 " -- ",
+        Hour, Minute, Second, float(Ms), mname, fname, fline
     );
 
     int32 Result = std::vsprintf(&szOutputBuffer[offset], format, vl);
-
-    if (ln)
+    if (ln && (Result > 0))
     {
-        if (Result > 0)
-        {
-            offset += Result;
-            std::sprintf(&szOutputBuffer[offset], "\n");
-        };
+        offset += Result;
+        std::sprintf(&szOutputBuffer[offset], "\n");
     };
 
-    EnterCriticalSection(&DbgContainer.Cs);
-    std::printf("%s", szOutputBuffer);
-	LeaveCriticalSection(&DbgContainer.Cs);
+    {
+        std::unique_lock<std::recursive_mutex> lock(DbgContainer.Mutex);
+        std::printf("%s", szOutputBuffer);
+    }
+
     OutputDebugStringA(szOutputBuffer);
 };
 
@@ -94,7 +105,8 @@ static void DbgFatalNoRet(const char* reason)
     std::sprintf(szFatalBuffer, "%s\n\n", reason);
 
     uint32 Flags = MB_ICONERROR;
-    
+
+#ifdef _DEBUG
     if (DbgContainer.FlagAssertion)
     {
         std::strcat(szFatalBuffer, "Press OK to execute debugbreak or CANCEL to terminate program.");
@@ -105,16 +117,23 @@ static void DbgFatalNoRet(const char* reason)
         std::strcat(szFatalBuffer, "Press OK to terminate program.");
         Flags |= (MB_OK | MB_DEFBUTTON1);
     };
-	EnterCriticalSection(&DbgContainer.Cs);
-    int32 iResult = MessageBoxA(NULL, szFatalBuffer, "Fatal error", Flags);
-    if (iResult == IDOK)
-        __debugbreak();
-	LeaveCriticalSection(&DbgContainer.Cs);
-    TerminateProcess(GetCurrentProcess(), -1);
+#else
+	std::strcat(szFatalBuffer, "Press OK to terminate program.");
+	Flags |= (MB_OK | MB_DEFBUTTON1);
+#endif
+
+    {
+        std::unique_lock<std::recursive_mutex> lock(DbgContainer.Mutex);
+        int32 iResult = MessageBoxA(NULL, szFatalBuffer, "Fatal error", Flags);
+        if (iResult == IDOK)
+            __debugbreak();
+    }
+
+    TerminateProcess(GetCurrentProcess(), UINT(-1));
 };
 
 
-void DbgInitialize(void)
+/*DLLSHARED*/ void DbgInitialize(void)
 {
     AllocConsole();
     AttachConsole(GetCurrentProcessId());
@@ -124,15 +143,11 @@ void DbgInitialize(void)
     freopen_s(&DbgContainer.StdErr, "CON", "w", stderr);
 
     DbgContainer.hWndConsole = GetConsoleWindow();
-
-    InitializeCriticalSection(&DbgContainer.Cs);
 };
 
 
-void DbgTerminate(void)
+/*DLLSHARED*/ void DbgTerminate(void)
 {
-    DeleteCriticalSection(&DbgContainer.Cs);
-
     std::fclose(DbgContainer.StdIn);
     std::fclose(DbgContainer.StdOut);
     std::fclose(DbgContainer.StdErr);
@@ -147,86 +162,73 @@ void DbgTerminate(void)
 };
 
 
-void DbgRegistModule(const char* pszLabel, HINSTANCE hInstance)
+/*DLLSHARED*/ void DbgRegistModule(const char* pszLabel, HINSTANCE hInstance)
 {
-    for (int32 i = 0; i < COUNT_OF(DbgContainer.aModule); ++i)
+    for (int32 i = 0; i < COUNT_OF(DbgContainer.Modules); ++i)
     {
-        DbgModule_t* DbgModule = &DbgContainer.aModule[i];
-        if (DbgModule->hInstance == NULL)
+        if (DbgContainer.Modules[i].base == 0)
         {
-            DbgModule->Label = pszLabel;
-            DbgModule->hInstance = hInstance;
+            DbgContainer.Modules[i].base = hInstance;
 
-            MODULEINFO ModuleInfo = {};
-            if (GetModuleInformation(GetCurrentProcess(), hInstance, &ModuleInfo, sizeof(ModuleInfo)))
-                DbgModule->ModuleSize = ModuleInfo.SizeOfImage;
-            else
-                ASSERT(false, "%u", GetLastError());
-
-            return;
+            ASSERT(std::strlen(pszLabel) < sizeof(DbgContainer.Modules[i].label));
+            std::strcpy(DbgContainer.Modules[i].label, pszLabel);
         };
     };
-
-    ASSERT(false);
 };
 
 
-void DbgRemoveModule(HINSTANCE hInstance)
+/*DLLSHARED*/ void DbgRemoveModule(HINSTANCE hInstance)
 {
-    for (int32 i = 0; i < COUNT_OF(DbgContainer.aModule); ++i)
+    for (int32 i = 0; i < COUNT_OF(DbgContainer.Modules); ++i)
     {
-        DbgModule_t* DbgModule = &DbgContainer.aModule[i];
-        if (DbgModule->hInstance == hInstance)
+        if (DbgContainer.Modules[i].base == hInstance)
         {
-            DbgModule->hInstance = NULL;
-            return;
+            DbgContainer.Modules[i].base = 0;
+            DbgContainer.Modules[i].label[0] = '\0';
         };
     };
-
-    ASSERT(false);
 };
 
 
-void DbgAssert(const char* expression, const char* fname, int32 fline)
+/*DLLSHARED*/ void DbgAssert(const char* expression, const char* fname, int32 fline)
 {
 #ifdef _DEBUG
-    EnterCriticalSection(&DbgContainer.Cs);
+    DbgInitReturnAddress();
     DbgAssert(expression, fname, fline, "Unknown error\n");
-    LeaveCriticalSection(&DbgContainer.Cs);
+    DbgClearReturnAddress();
 #endif
 };
 
 
-void DbgAssert(const char* expression, const char* fname, int32 fline, const char* format, ...)
+/*DLLSHARED*/ void DbgAssert(const char* expression, const char* fname, int32 fline, const char* format, ...)
 {
 #ifdef _DEBUG
-    EnterCriticalSection(&DbgContainer.Cs);
     DbgContainer.FlagAssertion = true;
-    ThreadSuspendAllExceptThis();
 
-    static char buff[4096] = { 0 };
-    
-    HMODULE ModuleHandle = MODULE_HANDLE_UNKNOWN;
-    const char* ModuleLabel = MODULE_LABEL_UNKNOWN;
-    const DbgModule_t* DbgModule = DbgSearchModuleByAddress(_ReturnAddress());
-    if (DbgModule)
-    {
-        ModuleHandle = DbgModule->hInstance;
-        ModuleLabel = DbgModule->Label;
-    };
+    char buff[4096] = { 0 };
+
+    void* Address = DbgInitReturnAddress();
+    DbgClearReturnAddress();
+
+    HMODULE hModule = DbgGetModuleBaseByAddress(Address);
+    const char* pszModuleName = DbgGetModuleNameByAddress(Address);
 
     int32 written = sprintf_s(buff, sizeof(buff),
         "Assertion!\n"
         "\n"
-        "Expression: %s\n"
-        "File: %s(%u)\n"
-        "Thread: %s(0x%x)\n"
-        "Module: %s(0x%x)\n"
+        "Expression:    %s\n"
+        "File:          %s(%" PRIi32 ")\n"
+        "Thread name:   %s\n"
+        "Thread id:     %" PRIu32 " (0x%" PRIx32 ")\n"
+        "Thread app id: %" PRIu32 " (0x%" PRIx32 ")\n"
+        "Module:        %s (0x%" PRIxPTR ")\n"
         "Description:\n",
         expression,
         fname, fline,
-        ThreadGetName(), ThreadGetId(),
-        ModuleLabel, uint32(ModuleHandle)
+        thread::current_name(),
+        thread::current_id(), thread::current_id(),
+        thread::current_app_id(), thread::current_app_id(),
+        pszModuleName, hModule
     );
 
     if (written)
@@ -241,31 +243,33 @@ void DbgAssert(const char* expression, const char* fname, int32 fline, const cha
     DbgFatalNoRet(buff);
     
     DbgContainer.FlagAssertion = false;
-    LeaveCriticalSection(&DbgContainer.Cs);
-    ThreadResumeAllExceptThis();
 #endif
 };
 
 
-void DbgOutput(const char* fname, int32 fline, const char* format, ...)
+/*DLLSHARED*/ void DbgOutput(const char* fname, int32 fline, const char* format, ...)
 {
     va_list vl;
     va_start(vl, format);
-    DbgOutputCommon(_ReturnAddress(), false, fname, fline, format, vl);
+    DbgInitReturnAddress();
+    DbgOutputCommon(false, fname, fline, format, vl);
+    DbgClearReturnAddress();
     va_end(vl);
 };
 
 
-void DbgOutputLn(const char* fname, int32 fline, const char* format, ...)
+/*DLLSHARED*/ void DbgOutputLn(const char* fname, int32 fline, const char* format, ...)
 {
     va_list vl;
     va_start(vl, format);
-    DbgOutputCommon(_ReturnAddress(), true, fname, fline, format, vl);
+    DbgInitReturnAddress();
+    DbgOutputCommon(true, fname, fline, format, vl);
+    DbgClearReturnAddress();
     va_end(vl);
 };
 
 
-void DbgFatal(const char* reason, ...)
+/*DLLSHARED*/ void DbgFatal(const char* reason, ...)
 {
     char Buff[4096];
     Buff[0] = '\0';

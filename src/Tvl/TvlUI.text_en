@@ -1,0 +1,24 @@
+Trovo.live viewbot
+Bot params
+Bot type:
+Channel name:
+Vod id:
+Clip id:
+Viewers:
+Views:
+Keepalive mode:
+Bot result
+Time:
+Viewers:
+Botted:
+Start
+Stop
+STREAM
+CLIP
+VOD
+Channel is not exist! Check for proper channel name.
+Channel is not live! Select a channel that is currently streaming.
+Specified stream channel is protected by auth challenge.
+Clip is not exist! Check for proper clip id.
+Vod is not exist! Check for proper vod id.
+Error

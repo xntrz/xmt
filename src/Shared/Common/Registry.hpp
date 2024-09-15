@@ -7,8 +7,8 @@ typedef void(*RegVarEnumCallback_t)(HOBJ hVar, const char* Name, const char* Val
 typedef void(*RegResetCallback_t)(void);
 
 
-DLLSHARED void RegInitialize(void);
-DLLSHARED void RegTerminate(void);
+void RegInitialize(void);
+void RegTerminate(void);
 DLLSHARED void RegResetRegist(RegResetCallback_t ResetCallback);
 DLLSHARED void RegResetExec(void);
 DLLSHARED void RegRefInc(void);

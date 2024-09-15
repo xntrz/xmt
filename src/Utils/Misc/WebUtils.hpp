@@ -28,7 +28,7 @@ std::string WebUrlExtractProto(const std::string& Url);
 std::string WebUrlExtractDomain(const std::string& Url);
 
 //
-//  Extracts port part from url
+//  Extracts port part from url as string
 //
 std::string WebUrlExtractPort(const std::string& Url);
 
@@ -68,3 +68,18 @@ std::string WebSubstrMem(const char* Mem, uint32 MemLen, const std::string& Begi
 //  Replaces "What" to "To" in "Src"
 //
 void WebStrRep(std::string& Src, const std::string& What, const std::string& To);
+
+//
+//  Returns true if port is secure
+//
+bool WebIsSecurePort(uint16 port);
+
+//
+//  Returns number of path levls in URL
+//
+uint32 WebUrlGetPathLevelCount(const std::string& Url);
+
+//
+//  Extract path name at specified level
+//
+std::string WebUrlGetPathAtLevel(const std::string& Url, uint32 lvl);

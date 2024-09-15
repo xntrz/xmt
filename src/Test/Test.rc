@@ -1,0 +1,6 @@
+#include "TestRc.hpp"
+
+#include <winres.h>
+
+
+IDF_TEXT_EN     RCDATA      "TestUI.text_en"

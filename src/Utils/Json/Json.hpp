@@ -27,6 +27,7 @@ public:
 	bool is_object(void) const;
 	bool is_array(void) const;
 	int array_size(void) const;
+	operator bool() const;
 
 private:
 	void* m_opaque;

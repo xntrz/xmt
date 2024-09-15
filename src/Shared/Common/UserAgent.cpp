@@ -15,7 +15,6 @@ struct UserAgentDb_t
 {
 	char Database[USERAGENT_MAXNUM][USERAGENT_MAXLEN];
 	std::atomic<int32> Count;
-	std::atomic<int32> Prev;
 };
 
 
@@ -94,7 +93,6 @@ static void UserAgentReadFile(HOBJ hFile)
 void UserAgentInitialize(void)
 {
 	UserAgentDb.Count = 0;
-	UserAgentDb.Prev = 0;
 };
 
 
@@ -104,7 +102,7 @@ void UserAgentTerminate(void)
 };
 
 
-void UserAgentRead(const char* Path, int32 RcId)
+/*DLLSHARED*/ void UserAgentRead(const char* Path, int32 RcId)
 {
 	if (RcId != -1)
 	{
@@ -125,7 +123,7 @@ void UserAgentRead(const char* Path, int32 RcId)
 };
 
 
-const char* UserAgentGenereate(void)
+/*DLLSHARED*/ const char* UserAgentGenereate(void)
 {
 	int32 Index = RndInt32(0, UserAgentDb.Count - 1);
 	return UserAgentDb.Database[Index];

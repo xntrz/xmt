@@ -2,10 +2,11 @@
 
 void AppMemInitialize(uint32 ReserveMemSize = 0);
 void AppMemTerminate(void);
+void AppMemTerminate2(void);
 void AppMemGrabDiag(
-    int64* AllocNum,
-    int64* CrossThreadAlloc,
-    int64* SelfThreadAlloc,
+    uint64* AllocNum,
+    uint64* CrossThreadAlloc,
+    uint64* SelfThreadAlloc,
     uint32* AllocatedBytes,
     uint32* LargestAllocSize,
     uint32* LargestAllocatedSize

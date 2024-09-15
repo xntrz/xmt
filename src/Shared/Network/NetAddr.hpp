@@ -5,8 +5,6 @@ DLLSHARED void NetAddrInit(uint64* NetAddr);
 DLLSHARED void NetAddrInit(uint64* NetAddr, const char* Ip, uint16 Port);
 DLLSHARED void NetAddrInit(uint64* NetAddr, uint32 Ip, uint16 Port);
 DLLSHARED bool NetAddrIsValid(uint64* NetAddr);
-DLLSHARED bool NetAddrIsInNetOrder(uint64* NetAddr);
-DLLSHARED bool NetAddrIsInHostOrder(uint64* NetAddr);
 DLLSHARED void NetAddrIp(uint64* NetAddr, uint32 Ip);
 DLLSHARED uint32 NetAddrIp(uint64* NetAddr);
 DLLSHARED void NetAddrPort(uint64* NetAddr, uint16 Port);

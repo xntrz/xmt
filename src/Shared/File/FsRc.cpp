@@ -1,9 +1,7 @@
 #include "FsRc.hpp"
 #include "Fs.hpp"
 
-#pragma warning(disable : 4477)
-
-#define RCFILE_DEF_TYPE "RAWFILE"
+#define RCFILE_DEF_TYPE "RT_RCDATA"
 #define RCFILE_NAME     "Rc"
 #define RCFILE_PATH     "rc:"
 
@@ -47,7 +45,6 @@ static uint32 RcFileWrite(HOBJ hFile, const char* Buffer, uint32 BufferSize);
 static uint64 RcFileTell(HOBJ hFile);
 static void RcFileSeek(HOBJ hFile, int64 Offset, FileSeek_t Seek);
 static void RcFileSync(HOBJ hFile);
-static bool RcFileSyncEx(HOBJ hFile, uint32 Timeout);
 static void RcFileFlush(HOBJ hFile);
 static bool RcFileIsEof(HOBJ hFile);
 static uint64 RcFileSize(HOBJ hFile);
@@ -175,7 +172,7 @@ static HOBJ RcFileOpen(FileSystem_t* Fs, const char* Path, const char* Access, v
         RcTypePtr = RcFileDefNameToDefTypeId(RcType);
     else
         RcTypePtr = RcType;
-
+	
     RcFile_t* RcFile = RcFileAlloc();
     if (RcFile)
     {
@@ -233,7 +230,7 @@ static uint32 RcFileRead(HOBJ hFile, char* Buffer, uint32 BufferSize)
     if (RcFileIsEof(RcFile))
         return 0;
     
-    uint32 Read = Min(BufferSize, uint32(RcFile->BufferSize - RcFile->Position));
+    uint32 Read = std::min(BufferSize, uint32(RcFile->BufferSize - RcFile->Position));
     std::memcpy(Buffer, &((char*)RcFile->Buffer)[RcFile->Position], Read);
     RcFile->Position += uint64(Read);
     
@@ -284,19 +281,13 @@ static void RcFileSeek(HOBJ hFile, int64 Offset, FileSeek_t Seek)
 
     RcFile->Position = Pos;
     ASSERT((RcFile->Position >= 0) && (RcFile->Position <= RcFile->BufferSize));
-    RcFile->Position = Clamp(RcFile->Position, 0ull, RcFile->BufferSize);    
+    RcFile->Position = clamp(RcFile->Position, 0ull, RcFile->BufferSize);    
 };
 
 
 static void RcFileSync(HOBJ hFile)
 {
     ;
-};
-
-
-static bool RcFileSyncEx(HOBJ hFile, uint32 Timeout)
-{
-    return true;
 };
 
 
@@ -369,7 +360,6 @@ bool RcFsOpen(void)
     RcFs->Tell      = RcFileTell;
     RcFs->Seek      = RcFileSeek;
     RcFs->Sync      = RcFileSync;
-    RcFs->SyncEx    = RcFileSyncEx;
     RcFs->Flush     = RcFileFlush;
     RcFs->IsEof     = RcFileIsEof;
     RcFs->Size      = RcFileSize;
@@ -401,6 +391,9 @@ const char* RcFsBuildPathEx(HMODULE hModule, int32 RcId, const char* RcType)
 {
     thread_local static char PathBuffer[MAX_PATH];
     PathBuffer[0] = '\0';
+
+	if (hModule == NULL)
+		hModule = GetModuleHandle(NULL);
 
     if (RcFileIsDefTypeId(RcType))
         RcType = RcFileDefTypeIdToDefName(RcType);

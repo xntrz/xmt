@@ -594,19 +594,19 @@ void CIniReader::writeChr(char ch)
 };
 
 
-static CIniContainer& IniContainer(void* hIni)
+static CIniContainer& IniContainer(HOBJ hIni)
 {	
 	return *(CIniContainer*)hIni;
 };
 
 
-HOBJ IniNew(void)
+/*DLLSHARED*/ HOBJ IniNew(void)
 {
-	return new CIniContainer();
+	return HOBJ(new CIniContainer());
 };
 
 
-HOBJ IniOpen(const char* Buffer, int32 BufferSize)
+/*DLLSHARED*/ HOBJ IniOpen(const char* Buffer, int32 BufferSize)
 {
 	CIniContainer* pIni = new CIniContainer();
 	if (pIni)
@@ -619,67 +619,67 @@ HOBJ IniOpen(const char* Buffer, int32 BufferSize)
 		};
 	};
 
-	return pIni;
+	return HOBJ(pIni);
 };
 
 
-bool IniSave(HOBJ hIni, char* Buffer, int32* BufferSize)
+/*DLLSHARED*/ bool IniSave(HOBJ hIni, char* Buffer, int32* BufferSize)
 {
 	CIniReader IniReader(*((CIniContainer*)hIni));
 	return IniReader.Export(Buffer, BufferSize);
 };
 
 
-void IniClose(HOBJ hIni)
+/*DLLSHARED*/ void IniClose(HOBJ hIni)
 {	
 	CIniContainer* pIni = (CIniContainer*)hIni;
 	delete pIni;
 };
 
 
-bool IniSegmentNew(HOBJ hIni, const char* Segment)
+/*DLLSHARED*/ bool IniSegmentNew(HOBJ hIni, const char* Segment)
 {
 	return IniContainer(hIni).SegmentNew(Segment);
 };
 
 
-bool IniSegmentSearch(HOBJ hIni, const char* Segment)
+/*DLLSHARED*/ bool IniSegmentSearch(HOBJ hIni, const char* Segment)
 {
 	return (IniContainer(hIni).SegmentSearch(Segment) != nullptr);
 };
 
 
-bool IniSegmentDelete(HOBJ hIni, const char* Segment)
+/*DLLSHARED*/ bool IniSegmentDelete(HOBJ hIni, const char* Segment)
 {
 	return IniContainer(hIni).SegmentDelete(Segment);
 };
 
 
-bool IniKeyNew(HOBJ hIni, const char* Segment, const char* Key)
+/*DLLSHARED*/ bool IniKeyNew(HOBJ hIni, const char* Segment, const char* Key)
 {
 	return IniContainer(hIni).KeyNew(Segment, Key);
 };
 
 
-bool IniKeySearch(HOBJ hIni, const char* Segment, const char* Key)
+/*DLLSHARED*/ bool IniKeySearch(HOBJ hIni, const char* Segment, const char* Key)
 {
 	return (IniContainer(hIni).KeySearch(Segment, Key) != nullptr);
 };
 
 
-bool IniKeyDelete(HOBJ hIni, const char* Segment, const char* Key)
+/*DLLSHARED*/ bool IniKeyDelete(HOBJ hIni, const char* Segment, const char* Key)
 {
 	return IniContainer(hIni).KeyDelete(Segment, Key);
 };
 
 
-void IniKeyEnum(HOBJ hIni, IniKeyEnumCallback_t pfnEnumCB, void* Param)
+/*DLLSHARED*/ void IniKeyEnum(HOBJ hIni, IniKeyEnumCallback_t pfnEnumCB, void* Param)
 {
 	IniContainer(hIni).KeyEnum(pfnEnumCB, Param);
 };
 
 
-bool IniKeyWriteInt(HOBJ hIni, const char* Segment, const char* Key, int32 Value)
+/*DLLSHARED*/ bool IniKeyWriteInt(HOBJ hIni, const char* Segment, const char* Key, int32 Value)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -689,7 +689,7 @@ bool IniKeyWriteInt(HOBJ hIni, const char* Segment, const char* Key, int32 Value
 };
 
 
-bool IniKeyWriteUInt(HOBJ hIni, const char* Segment, const char* Key, uint32 Value)
+/*DLLSHARED*/ bool IniKeyWriteUInt(HOBJ hIni, const char* Segment, const char* Key, uint32 Value)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -699,7 +699,7 @@ bool IniKeyWriteUInt(HOBJ hIni, const char* Segment, const char* Key, uint32 Val
 };
 
 
-bool IniKeyWriteHex(HOBJ hIni, const char* Segment, const char* Key, uint32 Value)
+/*DLLSHARED*/ bool IniKeyWriteHex(HOBJ hIni, const char* Segment, const char* Key, uint32 Value)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -709,7 +709,7 @@ bool IniKeyWriteHex(HOBJ hIni, const char* Segment, const char* Key, uint32 Valu
 };
 
 
-bool IniKeyWriteFloat(HOBJ hIni, const char* Segment, const char* Key, float Value)
+/*DLLSHARED*/ bool IniKeyWriteFloat(HOBJ hIni, const char* Segment, const char* Key, float Value)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -719,7 +719,7 @@ bool IniKeyWriteFloat(HOBJ hIni, const char* Segment, const char* Key, float Val
 };
 
 
-bool IniKeyWriteDouble(HOBJ hIni, const char* Segment, const char* Key, double Value)
+/*DLLSHARED*/ bool IniKeyWriteDouble(HOBJ hIni, const char* Segment, const char* Key, double Value)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -729,7 +729,7 @@ bool IniKeyWriteDouble(HOBJ hIni, const char* Segment, const char* Key, double V
 };
 
 
-bool IniKeyWriteBool(HOBJ hIni, const char* Segment, const char* Key, bool Value)
+/*DLLSHARED*/ bool IniKeyWriteBool(HOBJ hIni, const char* Segment, const char* Key, bool Value)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -739,7 +739,7 @@ bool IniKeyWriteBool(HOBJ hIni, const char* Segment, const char* Key, bool Value
 };
 
 
-bool IniKeyWriteString(HOBJ hIni, const char* Segment, const char* Key, const char* Buffer, int32 BufferSize)
+/*DLLSHARED*/ bool IniKeyWriteString(HOBJ hIni, const char* Segment, const char* Key, const char* Buffer, int32 BufferSize)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -749,7 +749,7 @@ bool IniKeyWriteString(HOBJ hIni, const char* Segment, const char* Key, const ch
 };
 
 
-bool IniKeyWriteString(HOBJ hIni, const char* Segment, const char* Key, const char* Value)
+/*DLLSHARED*/ bool IniKeyWriteString(HOBJ hIni, const char* Segment, const char* Key, const char* Value)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -759,7 +759,7 @@ bool IniKeyWriteString(HOBJ hIni, const char* Segment, const char* Key, const ch
 };
 
 
-bool IniKeyReadInt(HOBJ hIni, const char* Segment, const char* Key, int32* Value)
+/*DLLSHARED*/ bool IniKeyReadInt(HOBJ hIni, const char* Segment, const char* Key, int32* Value)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -769,7 +769,7 @@ bool IniKeyReadInt(HOBJ hIni, const char* Segment, const char* Key, int32* Value
 };
 
 
-bool IniKeyReadUInt(HOBJ hIni, const char* Segment, const char* Key, uint32* Value)
+/*DLLSHARED*/ bool IniKeyReadUInt(HOBJ hIni, const char* Segment, const char* Key, uint32* Value)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -779,7 +779,7 @@ bool IniKeyReadUInt(HOBJ hIni, const char* Segment, const char* Key, uint32* Val
 };
 
 
-bool IniKeyReadHex(HOBJ hIni, const char* Segment, const char* Key, uint32* Value)
+/*DLLSHARED*/ bool IniKeyReadHex(HOBJ hIni, const char* Segment, const char* Key, uint32* Value)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -789,7 +789,7 @@ bool IniKeyReadHex(HOBJ hIni, const char* Segment, const char* Key, uint32* Valu
 };
 
 
-bool IniKeyReadFloat(HOBJ hIni, const char* Segment, const char* Key, float* Value)
+/*DLLSHARED*/ bool IniKeyReadFloat(HOBJ hIni, const char* Segment, const char* Key, float* Value)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -799,7 +799,7 @@ bool IniKeyReadFloat(HOBJ hIni, const char* Segment, const char* Key, float* Val
 };
 
 
-bool IniKeyReadDouble(HOBJ hIni, const char* Segment, const char* Key, double* Value)
+/*DLLSHARED*/ bool IniKeyReadDouble(HOBJ hIni, const char* Segment, const char* Key, double* Value)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -809,7 +809,7 @@ bool IniKeyReadDouble(HOBJ hIni, const char* Segment, const char* Key, double* V
 };
 
 
-bool IniKeyReadBool(HOBJ hIni, const char* Segment, const char* Key, bool* Value)
+/*DLLSHARED*/ bool IniKeyReadBool(HOBJ hIni, const char* Segment, const char* Key, bool* Value)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -819,7 +819,7 @@ bool IniKeyReadBool(HOBJ hIni, const char* Segment, const char* Key, bool* Value
 };
 
 
-bool IniKeyReadString(HOBJ hIni, const char* Segment, const char* Key, char* Buffer, int32 BufferSize)
+/*DLLSHARED*/ bool IniKeyReadString(HOBJ hIni, const char* Segment, const char* Key, char* Buffer, int32 BufferSize)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;
@@ -833,7 +833,7 @@ bool IniKeyReadString(HOBJ hIni, const char* Segment, const char* Key, char* Buf
 };
 
 
-bool IniKeyReadString(HOBJ hIni, const char* Segment, const char* Key, const char** Value)
+/*DLLSHARED*/ bool IniKeyReadString(HOBJ hIni, const char* Segment, const char* Key, const char** Value)
 {
 	if (!IniContainer(hIni).KeySearch(Segment, Key))
 		return false;

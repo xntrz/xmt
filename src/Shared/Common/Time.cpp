@@ -3,24 +3,9 @@
 #include <sys/timeb.h>
 
 
-struct Time_t
-{
-	bool QpsOk;
-	double QpsScale;
-};
-
-
-static Time_t Time;
-
-
 void TimeInitialize(void)
 {
-	LARGE_INTEGER Freq = {};
-	if (QueryPerformanceFrequency(&Freq))
-	{
-		Time.QpsScale = (1000.0 / Freq.QuadPart);
-		Time.QpsOk = true;
-	};
+	;
 };
 
 
@@ -30,34 +15,25 @@ void TimeTerminate(void)
 };
 
 
-uint32 TimeCurrentTick(void)
+/*DLLSHARED*/ uint32 TimeCurrentTick(void)
 {
-	return uint32(GetTickCount());
+	return (uint32)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 };
 
 
-uint32 TimeCurrentTickPrecise(void)
+/*DLLSHARED*/ uint32 TimeCurrentTickPrecise(void)
 {
-	if (Time.QpsOk)
-	{
-		LARGE_INTEGER Counter = { 0 };
-		QueryPerformanceCounter(&Counter);
-		return uint32(Counter.QuadPart * Time.QpsScale);
-	}
-	else
-	{
-		return TimeCurrentTick();
-	};
+	return (uint32)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 };
 
 
-uint32 TimeCurrentUnix32(void)
+/*DLLSHARED*/ uint32 TimeCurrentUnix32(void)
 {
 	return TimeCurrentUnix32Ex(nullptr);
 };
 
 
-uint32 TimeCurrentUnix32Ex(uint32* Ms)
+/*DLLSHARED*/ uint32 TimeCurrentUnix32Ex(uint32* Ms)
 {
 	__timeb32 tm32 = {};
 	_ftime32_s(&tm32);
@@ -69,13 +45,13 @@ uint32 TimeCurrentUnix32Ex(uint32* Ms)
 };
 
 
-uint64 TimeCurrentUnix64(void)
+/*DLLSHARED*/ uint64 TimeCurrentUnix64(void)
 {
 	return TimeCurrentUnix64Ex(nullptr);
 };
 
 
-uint64 TimeCurrentUnix64Ex(uint32* Ms)
+/*DLLSHARED*/ uint64 TimeCurrentUnix64Ex(uint32* Ms)
 {
 	__timeb64 tm64 = {};
 	_ftime64_s(&tm64);
@@ -90,14 +66,14 @@ uint64 TimeCurrentUnix64Ex(uint32* Ms)
 };
 
 
-void TimeCurrentLocal(uint32* Hour, uint32* Minute, uint32* Second, uint32* Ms)
+/*DLLSHARED*/ void TimeCurrentLocal(uint32* Hour, uint32* Minute, uint32* Second, uint32* Ms)
 {
 	uint32 y, m, d;
 	TimeCurrentLocalEx(Hour, Minute, Second, Ms, &y, &m, &d);	
 };
 
 
-void TimeCurrentLocalEx(uint32* Hour, uint32* Minute, uint32* Second, uint32* Ms, uint32* Year, uint32* Month, uint32* Day)
+/*DLLSHARED*/ void TimeCurrentLocalEx(uint32* Hour, uint32* Minute, uint32* Second, uint32* Ms, uint32* Year, uint32* Month, uint32* Day)
 {
 	__timeb64 tm64 = {};
 	std::tm tm = {};
@@ -114,7 +90,7 @@ void TimeCurrentLocalEx(uint32* Hour, uint32* Minute, uint32* Second, uint32* Ms
 };
 
 
-void TimeStampSlice(uint32 Timestamp, uint32* Hour, uint32* Minute, uint32* Second, uint32* Ms)
+/*DLLSHARED*/ void TimeStampSlice(uint32 Timestamp, uint32* Hour, uint32* Minute, uint32* Second, uint32* Ms)
 {
 	*Hour 	= ((((Timestamp / 1000) / 60) / 60) % 60);
 	*Minute = (((Timestamp / 1000) / 60) % 60);

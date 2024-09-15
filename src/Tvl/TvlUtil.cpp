@@ -69,8 +69,64 @@ static TvluResult_t TvluReqVodCheck(const char* VodId, TvluVodCheckType_t Checkt
     );
 
     CHttpReq req;
-    req.set_timeout(5000);
-    req.set_request(
+    req.set_read_timeout(std::chrono::milliseconds(5000));
+    req.on_error([&](CHttpReq& req, int32 errcode) {
+        OUTPUTLN("req failed - error: %s", CHttpReq::errcode_to_str(errcode));
+    });
+    req.on_complete([&](CHttpReq& req, CHttpResponse& resp) {
+        if (resp.status() != httpstatus::code_ok)
+        {
+            OUTPUTLN("req failed - return code: %d", resp.status());
+            return true;
+        };
+
+        try
+        {
+            CJson json(req.response().body(), req.response().body_size());
+            if (json.is_array())
+            {
+                switch (Checktype)
+                {
+                case TvluVodCheckType_Exist:
+                    {
+                        try
+                        {
+                            //
+                            //  Accessing data without throwing exception means vod is founded!
+                            //
+                            std::string Data = json[0]["data"]["vod_VodReaderService_BatchGetVodDetailInfo"]["VodDetailInfos"][VodId]["channelInfo"].data();
+                            Result.Boolean = true;
+                        }
+                        catch (CJson::exception& e)
+                        {
+                            (void)e;
+                            Result.Boolean = false;
+                        };
+                    }
+                    break;
+
+                case TvluVodCheckType_Views:
+                    {
+                        std::string Data = json[0]["data"]["vod_VodReaderService_BatchGetVodDetailInfo"]["VodDetailInfos"][VodId]["vodInfo"]["watchNum"].data();
+                        Result.Integer = std::atoi(Data.c_str());
+                    }
+                    break;
+
+                default:
+                    ASSERT(false);
+                    break;
+                };
+            };
+        }
+        catch (CJson::exception& e)
+        {
+            (void)e;
+            OUTPUTLN("json --> %s", e.what());
+        };
+        return true;
+    });
+    req.send(
+        "https://api-web.trovo.live",
         "POST /graphql?" + std::string(Query) + " HTTP/1.1\r\n"
         "Host: api-web.trovo.live\r\n"
         "origin: https://trovo.live\r\n"
@@ -82,70 +138,10 @@ static TvluResult_t TvluReqVodCheck(const char* VodId, TvluVodCheckType_t Checkt
         "Content-Length: " + std::to_string(PayloadLen) + "\r\n"
         "Connection: close\r\n"
         "\r\n"
-        + Payload
+        + Payload,
+		std::chrono::milliseconds(5000)
     );
-    req.on_error(
-        [&](CHttpReq& req, int32 errcode)
-        {
-            OUTPUTLN("req failed - error: %s", CHttpReq::errcode_to_str(errcode));
-        }
-    );
-    req.on_complete(
-        [&](CHttpReq& req, CHttpResponse& resp)
-        {
-            if (resp.status() != httpstatus::code_ok)
-            {
-                OUTPUTLN("req failed - return code: %d", resp.status());
-                return;
-            };
-
-            try
-            {
-                CJson json(req.response().body(), req.response().body_size());
-                if (json.is_array())
-                {
-                    switch (Checktype)
-                    {
-                    case TvluVodCheckType_Exist:
-                        {
-                            try
-                            {
-                                //
-                                //  Accessing data without throwing exception means vod is founded!
-                                //
-                                std::string Data = json[0]["data"]["vod_VodReaderService_BatchGetVodDetailInfo"]["VodDetailInfos"][VodId]["channelInfo"].data();
-                                Result.Boolean = true;
-                            }
-                            catch (CJson::exception& e)
-                            {
-                                REF(e);
-                                Result.Boolean = false;
-                            };
-                        }
-                        break;
-
-                    case TvluVodCheckType_Views:
-                        {
-                            std::string Data = json[0]["data"]["vod_VodReaderService_BatchGetVodDetailInfo"]["VodDetailInfos"][VodId]["vodInfo"]["watchNum"].data();
-                            Result.Integer = std::atoi(Data.c_str());
-                        }
-                        break;
-
-                    default:
-                        ASSERT(false);
-                        break;
-                    };
-                };
-            }
-            catch (CJson::exception& e)
-            {
-                REF(e);
-                OUTPUTLN("json --> %s", e.what());
-            };
-        }
-    );
-    if (req.send("https://api-web.trovo.live", 5000u))
-        req.wait();
+    req.wait();
 
     return Result;
 };
@@ -185,97 +181,94 @@ static TvluResult_t TvluReqChannelCheck(const std::string& ChannelName, TvluChan
     );
 
     CHttpReq req;
-    req.set_timeout(5000);
-    req.set_request(
+    req.set_read_timeout(std::chrono::milliseconds(5000));
+    req.on_error([&](CHttpReq& req, int32 errcode) {
+        OUTPUTLN("req failed - error: %s", CHttpReq::errcode_to_str(errcode));
+    });
+    req.on_complete([&](CHttpReq& req, CHttpResponse& resp) {
+        if (resp.status() != httpstatus::code_ok)
+        {
+            OUTPUTLN("req failed - return code: %d", resp.status());
+            return true;
+        };
+
+        try
+        {
+            CJson json(req.response().body(), req.response().body_size());
+            if (json.is_array())
+            {
+                switch (Checktype)
+                {
+                case TvluChannelCheckType_Exist:
+                    {
+                        try
+                        {
+                            //
+                            //  Accessing data without throwing exception means error is present
+                            //
+                            std::string Data = json[0]["errors"][0]["message"].data();
+                            Result.Boolean = false;
+                        }
+                        catch (CJson::exception& e)
+                        {
+                            (void)e;
+                            Result.Boolean = true;
+                        };
+                    }
+                    break;
+
+                case TvluChannelCheckType_Live:
+                    {
+                        std::string Data = json[0]["data"]["live_LiveReaderService_GetLiveInfo"]["isLive"].data();
+                        Result.Boolean = (std::atoi(Data.c_str()) == 1);
+                    }
+                    break;
+
+                case TvluChannelCheckType_Viewers:
+                    {
+                        std::string Data = json[0]["data"]["live_LiveReaderService_GetLiveInfo"]["channelInfo"]["viewers"].data();
+                        Result.Integer = std::atoi(Data.c_str());
+                    }
+                    break;
+
+                case TvluChannelCheckType_ChannelId:
+                    {
+                        std::string Data = json[0]["data"]["live_LiveReaderService_GetLiveInfo"]["channelInfo"]["id"].data();
+                        Result.Integer = std::atoi(Data.c_str());
+                    }
+                    break;
+
+                default:
+                    ASSERT(false);
+                    break;
+                };
+            };
+        }
+        catch (CJson::exception& e)
+        {
+            (void)e;
+            OUTPUTLN("json --> %s", e.what());
+        };
+
+        return true;
+    });
+    req.send(
+        "https://api-web.trovo.live",
         "POST /graphql?" + std::string(Query) + " HTTP/1.1\r\n"
         "Host: api-web.trovo.live\r\n"
-		"origin: https://trovo.live\r\n"
+        "origin: https://trovo.live\r\n"
         "Referer: https://trovo.live/\r\n"
         "User-Agent: " + std::string(TVLU_USER_AGENT) + "\r\n"
         "Accept: */*\r\n"
-		"cookie: pgg_pvid=" + TvluGeneratePVID() + "\r\n"
+        "cookie: pgg_pvid=" + TvluGeneratePVID() + "\r\n"
         "Content-Type: text/plain\r\n"
         "Content-Length: " + std::to_string(PayloadLen) + "\r\n"
         "Connection: close\r\n"
         "\r\n"
-        + Payload
+        + Payload,
+		std::chrono::milliseconds(5000)
     );
-    req.on_error(
-        [&](CHttpReq& req, int32 errcode)
-        {
-            OUTPUTLN("req failed - error: %s", CHttpReq::errcode_to_str(errcode));
-        }
-    );    
-    req.on_complete(
-        [&](CHttpReq& req, CHttpResponse& resp)
-        {
-            if (resp.status() != httpstatus::code_ok)
-            {
-                OUTPUTLN("req failed - return code: %d", resp.status());
-                return;
-            };
-
-            try
-            {
-                CJson json(req.response().body(), req.response().body_size());
-                if (json.is_array())
-                {
-                    switch (Checktype)
-                    {
-                    case TvluChannelCheckType_Exist:
-                        {
-                            try
-                            {
-                                //
-                                //  Accessing data without throwing exception means error is present
-                                //
-                                std::string Data = json[0]["errors"][0]["message"].data();
-                                Result.Boolean = false;
-                            }
-                            catch (CJson::exception& e)
-                            {
-                                REF(e);
-                                Result.Boolean = true;
-                            };
-                        }
-                        break;
-
-                    case TvluChannelCheckType_Live:
-                        {
-                            std::string Data = json[0]["data"]["live_LiveReaderService_GetLiveInfo"]["isLive"].data();
-                            Result.Boolean = (std::atoi(Data.c_str()) == 1);
-                        }
-                        break;
-
-                    case TvluChannelCheckType_Viewers:
-                        {
-                            std::string Data = json[0]["data"]["live_LiveReaderService_GetLiveInfo"]["channelInfo"]["viewers"].data();
-                            Result.Integer = std::atoi(Data.c_str());
-                        }
-                        break;
-
-                    case TvluChannelCheckType_ChannelId:
-                        {
-                            std::string Data = json[0]["data"]["live_LiveReaderService_GetLiveInfo"]["channelInfo"]["id"].data();
-                            Result.Integer = std::atoi(Data.c_str());
-                        }
-                        break;
-
-                    default:
-                        ASSERT(false);
-                        break;
-                    };
-                };
-            }
-            catch (CJson::exception& e)
-            {
-                REF(e);
-                OUTPUTLN("json --> %s", e.what());
-            };
-        }
-    );
-    if (req.send("https://api-web.trovo.live", 5000u))
-        req.wait();
+    req.wait();
 
     return Result;
 };
@@ -287,13 +280,7 @@ void TvluInitialize(void)
 };
 
 
-void TvluPreTerminate(void)
-{
-    CHttpReq::cancel_all();
-};
-
-
-void TvluPostTerminate(void)
+void TvluTerminate(void)
 {
     ;
 };
@@ -419,8 +406,21 @@ bool TvluIsChannelProtected(const char* ChannelName)
     );
 
     CHttpReq req;
-    req.set_timeout(5000);
-    req.set_request(
+    req.set_read_timeout(std::chrono::milliseconds(5000));
+    req.on_complete([&](CHttpReq& req, CHttpResponse& resp) {
+        if (resp.status() == httpstatus::code_ok)
+        {
+            //
+            //	If channel is protected returns json with array of errors obj with msg "need login"
+            //
+            std::string ResponseJson(req.response().body(), req.response().body_size());
+            if (ResponseJson.find("need login") == std::string::npos)
+                bResult = false;
+        };
+        return true;
+    });
+    req.send(
+        "https://api-web.trovo.live",
         "POST /graphql?" + std::string(Query) + " HTTP/1.1\r\n"
         "Host: api-web.trovo.live\r\n"
         "Referer: https://trovo.live/\r\n"
@@ -432,22 +432,7 @@ bool TvluIsChannelProtected(const char* ChannelName)
         "\r\n"
         + Payload
     );
-    req.on_complete(
-        [&](CHttpReq& req, CHttpResponse& resp)
-        {
-            if (resp.status() == httpstatus::code_ok)
-            {
-                //
-                //	If channel is protected returns json with array of errors obj with msg "need login"
-                //
-                std::string ResponseJson(req.response().body(), req.response().body_size());
-                if (ResponseJson.find("need login") == std::string::npos)
-                    bResult = false;
-            };
-        }
-    );
-    if (req.send("https://api-web.trovo.live"))
-        req.wait();
+    req.wait();
 
     return bResult;
 };
